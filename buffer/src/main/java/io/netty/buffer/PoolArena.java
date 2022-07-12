@@ -17,6 +17,7 @@
 package io.netty.buffer;
 
 import io.netty.util.internal.LongCounter;
+import io.netty.util.internal.ObjectPool;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
 
@@ -122,7 +123,25 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
     abstract boolean isDirect();
 
     PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
+        /**
+         *2019-12-09 liang fix
+         *              获取 netty 自定义 bytebuf 对象 这里是从 Recycle(object 回收器) 获取
+         *              {@link PooledUnsafeDirectByteBuf}
+         *              回收策略为
+         *              {@link io.netty.util.Recycler.DefaultHandle}
+         *              这个buf 初始化时候目前还没有和 内存 进行绑定,
+         *                  真正绑定是在 1.第一次初始化时 {@link PoolChunk#initBuf(PooledByteBuf, ByteBuffer, long, int)}
+         *              {@link PooledUnsafeDirectByteBuf#newInstance(int)}
+         *              这里获取的是一个初始化过后的对象
+         *
+         */
         PooledByteBuf<T> buf = newByteBuf(maxCapacity);
+        /**
+         *2019-12-10 liang fix
+         *              进行内存分配 (缓存和内存)
+         *                  缓存分配
+         *                  实际内存分配
+         */
         allocate(cache, buf, reqCapacity);
         return buf;
     }
@@ -661,6 +680,14 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         @Override
         protected PooledByteBuf<ByteBuffer> newByteBuf(int maxCapacity) {
             if (HAS_UNSAFE) {
+                /**
+                 *2019-12-10 liang fix
+                 *              使用 RECYCLER 创建一个带回收特效的 PoolByteBuf 实际就是
+                 *                 {@link PooledUnsafeDirectByteBuf#PooledByteBuf(ObjectPool.Handle, int)}
+                 *              回收是通过构造器中的handler进行回收
+                 *                  {@link io.netty.util.Recycler.DefaultHandle}
+                 *                  PooledUnsafeDirectByteBuf
+                 */
                 return PooledUnsafeDirectByteBuf.newInstance(maxCapacity);
             } else {
                 return PooledDirectByteBuf.newInstance(maxCapacity);

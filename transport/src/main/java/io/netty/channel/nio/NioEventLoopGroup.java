@@ -66,10 +66,28 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
      * {@link SelectorProvider} which is returned by {@link SelectorProvider#provider()}.
      */
     public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      这里设置具体的Selector的提供方式,这里JDK为了屏蔽不同系统的差异性,使用的是SelectorProvider来提供
+         *      SelectorProvider 提供方式
+         *          1. 优先读取系统属性 "java.nio.channels.spi.SelectorProvider"
+         *          2. SPI机制读取用户配置 SelectorProvider
+         *          3. 使用JDK默认 DefaultSelectorProvider ,这个在不同系统上的jdk是不一样的
+         *      总之就是获取一个selector
+         */
         this(nThreads, threadFactory, SelectorProvider.provider());
     }
 
     public NioEventLoopGroup(int nThreads, Executor executor) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      这里设置具体的Selector的提供方式,这里JDK为了屏蔽不同系统的差异性,使用的是SelectorProvider来提供
+         *      SelectorProvider 提供方式
+         *          1. 优先读取系统属性 "java.nio.channels.spi.SelectorProvider"
+         *          2. SPI机制读取用户配置 SelectorProvider
+         *          3. 使用JDK默认 DefaultSelectorProvider ,这个在不同系统上的jdk是不一样的
+         *      总之就是获取一个selector
+         */
         this(nThreads, executor, SelectorProvider.provider());
     }
 
@@ -79,16 +97,30 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
      */
     public NioEventLoopGroup(
             int nThreads, ThreadFactory threadFactory, final SelectorProvider selectorProvider) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      配置SelectStrategyFactory 策略
+         *      默认情况下是 {@link DefaultSelectStrategyFactory}  ??
+         *
+         */
         this(nThreads, threadFactory, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 
     public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory,
         final SelectorProvider selectorProvider, final SelectStrategyFactory selectStrategyFactory) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      设置拒绝处理器??
+         */
         super(nThreads, threadFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
     }
 
     public NioEventLoopGroup(
             int nThreads, Executor executor, final SelectorProvider selectorProvider) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      设置拒绝处理器??
+         */
         this(nThreads, executor, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
     }
 

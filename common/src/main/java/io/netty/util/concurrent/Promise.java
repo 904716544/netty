@@ -18,6 +18,10 @@ package io.netty.util.concurrent;
 /**
  * Special {@link Future} which is writable.
  */
+/**
+ *   liang fix @date 2022/7/13
+ *      提供future的
+ */
 public interface Promise<V> extends Future<V> {
 
     /**
@@ -25,6 +29,7 @@ public interface Promise<V> extends Future<V> {
      * listeners.
      *
      * If it is success or failed already it will throw an {@link IllegalStateException}.
+     * liang fix 标记这个future是否是成功,如果已经设置会这里会报错
      */
     Promise<V> setSuccess(V result);
 
@@ -35,6 +40,7 @@ public interface Promise<V> extends Future<V> {
      * @return {@code true} if and only if successfully marked this future as
      *         a success. Otherwise {@code false} because this future is
      *         already marked as either a success or a failure.
+     *  liang fix 不会抛出异常
      */
     boolean trySuccess(V result);
 
@@ -61,6 +67,7 @@ public interface Promise<V> extends Future<V> {
      *
      * @return {@code true} if and only if successfully marked this future as uncancellable or it is already done
      *         without being cancelled.  {@code false} if this future has been cancelled already.
+     * liang fix 标记可能被取消
      */
     boolean setUncancellable();
 
@@ -76,15 +83,19 @@ public interface Promise<V> extends Future<V> {
     @Override
     Promise<V> removeListeners(GenericFutureListener<? extends Future<? super V>>... listeners);
 
+    // 2022/7/9 liang fix 等待完成
     @Override
     Promise<V> await() throws InterruptedException;
 
+    // 2022/7/9 liang fix 不可中断等待完成
     @Override
     Promise<V> awaitUninterruptibly();
 
+    // 2022/7/9 liang fix 异步转同步等待
     @Override
     Promise<V> sync() throws InterruptedException;
 
+    // 2022/7/9 liang fix 异步转同步等待,可被中断返回
     @Override
     Promise<V> syncUninterruptibly();
 }

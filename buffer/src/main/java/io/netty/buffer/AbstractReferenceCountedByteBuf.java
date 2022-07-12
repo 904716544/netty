@@ -24,11 +24,19 @@ import io.netty.util.internal.ReferenceCountUpdater;
  * Abstract base class for {@link ByteBuf} implementations that count references.
  */
 public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
+
     private static final long REFCNT_FIELD_OFFSET =
             ReferenceCountUpdater.getUnsafeOffset(AbstractReferenceCountedByteBuf.class, "refCnt");
+
+    // 2022/7/10 liang fix AtomicIntegerFieldUpdater 这个类是JDK自带的类,功能是通过反射的机制获取一个类中int类型的属性进行操作
     private static final AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> AIF_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AbstractReferenceCountedByteBuf.class, "refCnt");
 
+    /**
+     *   liang fix @date 2022/7/10 重要
+     *
+     *
+     */
     private static final ReferenceCountUpdater<AbstractReferenceCountedByteBuf> updater =
             new ReferenceCountUpdater<AbstractReferenceCountedByteBuf>() {
         @Override

@@ -157,6 +157,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         super(parent);
         this.addTaskWakesUp = addTaskWakesUp;
         this.maxPendingTasks = Math.max(16, maxPendingTasks);
+        // 2022/7/10 liang fix 包装者模式?保证返回的是一个 Executor, 线程执行器的包装类:ThreadExecutorMap ????
         this.executor = ThreadExecutorMap.apply(executor, this);
         taskQueue = newTaskQueue(this.maxPendingTasks);
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");

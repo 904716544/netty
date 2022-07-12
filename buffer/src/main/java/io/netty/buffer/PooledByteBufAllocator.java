@@ -388,18 +388,51 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     @Override
     protected ByteBuf newDirectBuffer(int initialCapacity, int maxCapacity) {
+        /**
+         *2019-12-09 liang fix
+         *              获取当前 thread 的 cache , 同线程进行绑定
+         *              里头 存在 directArena 对象 对 direct 内存进行分配
+         *              {@link PoolArena}
+         *              每个线程都是独享的一个PoolArena的,原因在于Nio线程默认是 cpu * 2
+         *              而我们的 directArenas 数组本身 也是 cpu * 2
+         *              因此,每个Nio线程 包含一个 cache (包含一个 线程独有的 PoolArena) 防止了锁的竞争
+         *              {@link PoolThreadCache#PoolThreadCache(PoolArena, PoolArena, int, int, int, int, int)}
+         *              同时,在创建 PoolThreadCache 的同时,这里又是创建有 3个数组,存储不同规格的缓存
+         *                     PoolArena<ByteBuffer> directArena    线程独有
+         *                     SubPageMemoryRegionCache tinySubPageDirectCaches  0 - 512B      32长度
+         *                     SubPageMemoryRegionCache smallSubPageDirectCaches 512 - 8192B   4长度
+         *                     SubPageMemoryRegionCache normalDirectCaches   8kb - 16kb        2长度
+         *               {@link io.netty.buffer.PoolThreadCache.SubPageMemoryRegionCache#SubPageMemoryRegionCache(int, PoolArena.SizeClass)}
+         */
+
+        /**
+         *2019-12-10 liang fix
+         *              MemoryRegionCache 分析
+         *              {@link io.netty.buffer.PoolThreadCache.MemoryRegionCache#MemoryRegionCache(int, PoolArena.SizeClass)}  }
+         *                  size      标识本身 cache 内存规格 16/32/48 ...
+         *                  sizeClass  tiny/small.normal
+         */
+
         PoolThreadCache cache = threadCache.get();
         PoolArena<ByteBuffer> directArena = cache.directArena;
 
         final ByteBuf buf;
         if (directArena != null) {
+            /**
+             *2019-12-10 liang fix
+             *              进行内存分配
+             */
             buf = directArena.allocate(cache, initialCapacity, maxCapacity);
         } else {
             buf = PlatformDependent.hasUnsafe() ?
                     UnsafeByteBufUtil.newUnsafeDirectByteBuf(this, initialCapacity, maxCapacity) :
                     new UnpooledDirectByteBuf(this, initialCapacity, maxCapacity);
         }
-
+        /**
+         * liang fix 对buffer进行包装 方便监控
+         *      进行内存的泄露监控,实际就是对于ByteBuf对象进行引用计数
+         *
+         */
         return toLeakAwareBuffer(buf);
     }
 

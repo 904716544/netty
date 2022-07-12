@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
 
+    // 2022/7/9 liang fix 事件执行器组
     private final EventExecutor[] children;
     private final Set<EventExecutor> readonlyChildren;
     private final AtomicInteger terminatedChildren = new AtomicInteger();
@@ -57,6 +58,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor, Object... args) {
+        /**
+         *   liang fix @date 2022/7/9
+         *      设置默认事件执行器
+         */
         this(nThreads, executor, DefaultEventExecutorChooserFactory.INSTANCE, args);
     }
 
@@ -72,15 +77,18 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
         checkPositive(nThreads, "nThreads");
 
+        // 2022/7/9 liang fix 设置默认的 executor
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
+        // 2022/7/9 liang fix 创建事件执行器组
         children = new EventExecutor[nThreads];
 
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
+                // 2022/7/9 liang fix 创建事件执行对象
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
@@ -108,8 +116,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
+        // 2022/7/9 liang fix 选择对象 ??
         chooser = chooserFactory.newChooser(children);
 
+        // 2022/7/9 liang fix 终结监听器对象
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
@@ -119,12 +129,14 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         };
 
+        // 2022/7/9 liang fix 添加终结监听器
         for (EventExecutor e: children) {
             e.terminationFuture().addListener(terminationListener);
         }
 
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
+        // 2022/7/9 liang fix 修改为只读对象???
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }
 

@@ -129,16 +129,20 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 2022/7/9 liang fix 设置通道选项&属性
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
+        // 2022/7/9 liang fix 获取 pipeLine
         ChannelPipeline p = channel.pipeline();
 
+        // 2022/7/9 liang fix 获取子事件循环组 & 子handler
         final EventLoopGroup currentChildGroup = childGroup;
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
 
+        // 2022/7/9 liang fix 这里会添加一个 ChannelInitializer 来完成当前
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {

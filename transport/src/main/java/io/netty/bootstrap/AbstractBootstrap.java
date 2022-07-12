@@ -265,37 +265,55 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public ChannelFuture bind(SocketAddress localAddress) {
         validate();
+        // 2022/7/9 liang fix 调用具体的bind方法
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
+    /**
+     *   liang fix @date 2022/7/9
+     *         构建者模式 + promise + future异步模式
+     */
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 2022/7/9 liang fix 初始化注册,这里是异步的
         final ChannelFuture regFuture = initAndRegister();
+        // 2022/7/9 liang fix 获取上一步注册的 channel
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
         }
 
         if (regFuture.isDone()) {
+            // 2022/7/9 liang fix 注册成功
+            // TODO: 2022/7/9  这里的promise 是什么用法?????
+            /**
+             *   liang fix @date 2022/7/9
+             *          promise 继承自Future,提供了监听器的支持,支持操作完成时的回调操作
+             */
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
+            // 2022/7/9 liang fix 进行端口的绑定工作
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
+            // 2022/7/9 liang fix 添加通道的future监听器,即promise模式
             regFuture.addListener(new ChannelFutureListener() {
+                // 2022/7/9 liang fix 回调方法
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     Throwable cause = future.cause();
                     if (cause != null) {
+                        // 2022/7/9 liang fix 注册失败
                         // Registration on the EventLoop failed so fail the ChannelPromise directly to not cause an
                         // IllegalStateException once we try to access the EventLoop of the Channel.
                         promise.setFailure(cause);
                     } else {
+                        // 2022/7/9 liang fix 注册成功
                         // Registration was successful, so set the correct executor to use.
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
-
+                        // 2022/7/9 liang fix 进一步的绑定工作
                         doBind0(regFuture, channel, localAddress, promise);
                     }
                 }
@@ -307,6 +325,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            /**
+             *   liang fix @date 2022/7/9
+             *          获取channel 并且初始化,这里的初始化时netty完成,会进行一系列的设置工作
+             *          默认情况下server端这里的channel是 {@link io.netty.channel.socket.nio.NioServerSocketChannel}
+             */
             channel = channelFactory.newChannel();
             init(channel);
         } catch (Throwable t) {
@@ -320,6 +343,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        // 2022/7/9 liang fix 初始化完成进行注册
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

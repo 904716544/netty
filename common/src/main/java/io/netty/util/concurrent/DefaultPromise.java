@@ -33,21 +33,35 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
+    // 2022/7/13 liang fix // 正常日志的日志句柄，InternalLogger是Netty內部封裝的日志接口
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultPromise.class);
+
+    // 2022/7/13 liang fix // 任務拒絕執行時候的日志句柄 - Promise需要作為一個任務提交到線程中執行，如果任務拒絕則使用此日志句柄打印日志
     private static final InternalLogger rejectedExecutionLogger =
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
+
+    // 2022/7/13 liang fix // 監聽器的最大棧深度，默認值為8，這個值是防止嵌套回調調用的時候棧深度過大導致內存溢出，後面會舉個例子說明它的用法
     private static final int MAX_LISTENER_STACK_DEPTH = Math.min(8,
             SystemPropertyUtil.getInt("io.netty.defaultPromise.maxListenerStackDepth", 8));
     @SuppressWarnings("rawtypes")
+    // 2022/7/13 liang fix // 結果更新器，用於CAS更新結果result的值
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
+
+    // 2022/7/13 liang fix // 用於填充result的值，當設置結果result傳入null，Promise執行成功，用這個值去錶示成功的結果
     private static final Object SUCCESS = new Object();
+    // 2022/7/13 liang fix // 用於填充result的值，錶示Promise不能被取消
     private static final Object UNCANCELLABLE = new Object();
+    // 2022/7/13 liang fix // CancellationException實例的持有器，用於判斷Promise取消狀態和拋出CancellationException
     private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
+
+    // 2022/7/13 liang fix // CANCELLATION_CAUSE_HOLDER的异常棧信息元素數組
     private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
+    // 2022/7/13 liang fix 执行的结果，使用volatile修饰，保证可见性
     private volatile Object result;
+    // 2022/7/13 liang fix 当Promise执行完成时需要通知Listener，此时就使用这个executor
     private final EventExecutor executor;
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
@@ -55,16 +69,19 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      *
      * Threading - synchronized(this). We must support adding listeners when there is no EventExecutor.
      */
+    // 2022/7/13 liang fix 要通知的listener，因为它可能是不同的类型，所以定义为Object类型，使用时再判断类型
     private Object listeners;
     /**
      * Threading - synchronized(this). We are required to hold the monitor to use Java's underlying wait()/notifyAll().
      */
+    // 2022/7/13 liang fix 要使用wait()/notifyAll()机制，这个变量记录了waiter的数量
     private short waiters;
 
     /**
      * Threading - synchronized(this). We must prevent concurrent notification and FIFO listener notification if the
      * executor changes.
      */
+    // 2022/7/13 liang fix 是否正在通知listener
     private boolean notifyingListeners;
 
     /**

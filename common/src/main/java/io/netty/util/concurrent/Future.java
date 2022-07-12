@@ -19,8 +19,16 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 
 
+
 /**
- * The result of an asynchronous operation.
+ *   liang fix @date 2022/7/13
+ *      The result of an asynchronous operation.
+ *      copy自netty的 io.netty.util.concurrent.Future
+ *      相比较于JDK的future,这里增加了一些方法
+ *      1. listener 相关,用于回调使用
+ *      2. 判断方法, isSuccess() & isCancellable() & cause()
+ *      3. sync() & await() 方法阻塞等待结果
+ *
  */
 @SuppressWarnings("ClassNameSameAsAncestorName")
 public interface Future<V> extends java.util.concurrent.Future<V> {

@@ -42,6 +42,7 @@ import static io.netty.util.internal.MathUtil.isOutOfBounds;
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 /**
+ * ByteBuf 的实现的骨架
  * A skeletal implementation of a buffer.
  */
 public abstract class AbstractByteBuf extends ByteBuf {

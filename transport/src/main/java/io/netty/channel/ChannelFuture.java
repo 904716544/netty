@@ -162,12 +162,17 @@ import java.util.concurrent.TimeUnit;
  * }
  * </pre>
  */
+/**
+ *   liang fix @date 2022/7/13
+ *      它将和 IO 操作中的 Channel 关联在一起了，用于异步处理 Channel 中的事件。
+ */
 public interface ChannelFuture extends Future<Void> {
 
     /**
      * Returns a channel where the I/O operation associated with this
      * future takes place.
      */
+    // 2022/7/13 liang fix ChannelFuture 关联的 Channel
     Channel channel();
 
     @Override
