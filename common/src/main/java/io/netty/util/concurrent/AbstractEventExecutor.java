@@ -40,7 +40,10 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
     static final long DEFAULT_SHUTDOWN_QUIET_PERIOD = 2;
     static final long DEFAULT_SHUTDOWN_TIMEOUT = 15;
 
+    // 2022/7/18 liang fix 表示的是这个EventExecutor处于哪个EventExecutorGroup组中
     private final EventExecutorGroup parent;
+
+    // 2022/7/18 liang fix 是一个包含只包含自身的集合
     private final Collection<EventExecutor> selfCollection = Collections.<EventExecutor>singleton(this);
 
     protected AbstractEventExecutor() {
@@ -56,6 +59,7 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return parent;
     }
 
+    // 2022/7/18 liang fix next 就是返回自身
     @Override
     public EventExecutor next() {
         return this;
@@ -66,11 +70,14 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return inEventLoop(Thread.currentThread());
     }
 
+    // 2022/7/18 liang fix 遍历也是返回自身
     @Override
     public Iterator<EventExecutor> iterator() {
         return selfCollection.iterator();
     }
 
+
+    // 2022/7/18 liang fix 实际还是调用的 shutdownGracefully ()方法,这里设置了默认的参数
     @Override
     public Future<?> shutdownGracefully() {
         return shutdownGracefully(DEFAULT_SHUTDOWN_QUIET_PERIOD, DEFAULT_SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
@@ -93,11 +100,13 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return Collections.emptyList();
     }
 
+    // 2022/7/18 liang fix 指定了 Promise 为 DefaultPromise
     @Override
     public <V> Promise<V> newPromise() {
         return new DefaultPromise<V>(this);
     }
 
+    // 2022/7/18 liang fix 指定了 ProgressivePromise 为 DefaultProgressivePromise
     @Override
     public <V> ProgressivePromise<V> newProgressivePromise() {
         return new DefaultProgressivePromise<V>(this);
@@ -128,6 +137,7 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return (Future<T>) super.submit(task);
     }
 
+    // 2022/7/18 liang fix 替换jdk的 newTaskFor 为自己实现的 PromiseTask 对象,支持listener的异步回调
     @Override
     protected final <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
         return new PromiseTask<T>(this, runnable, value);

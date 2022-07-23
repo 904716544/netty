@@ -30,6 +30,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Abstract base class for {@link EventExecutorGroup} implementations that handles their tasks with multiple threads at
  * the same time.
  */
+
+/**
+ *   liang fix @date 2022/7/23 抽象类,实现了大部分的线程处理事件的逻辑
+ *
+ */
 public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
 
     // 2022/7/9 liang fix 事件执行器组
@@ -116,7 +121,12 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
-        // 2022/7/9 liang fix 选择对象 ??
+        /**
+         *   liang fix @date 2022/7/23
+         *      配置chooser用来执行任务时选择具体的时间执行器 EventExecotor
+         *      {@link DefaultEventExecutorChooserFactory.PowerOfTwoEventExecutorChooser} 2次幂个数的 execotor 使用 & 位运算选择具体的执行器
+         *      {@link DefaultEventExecutorChooserFactory.GenericEventExecutorChooser} 利用 / 取余获取下一个执行器
+         */
         chooser = chooserFactory.newChooser(children);
 
         // 2022/7/9 liang fix 终结监听器对象
@@ -131,12 +141,13 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
         // 2022/7/9 liang fix 添加终结监听器
         for (EventExecutor e: children) {
+            // 2022/7/23 liang fix 利用了promise来注册事件回调器,当所有的 child 线程都启动成功后,当前group的 terminationFuture 就会返回成功
             e.terminationFuture().addListener(terminationListener);
         }
 
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
-        // 2022/7/9 liang fix 修改为只读对象???
+        // liang fix 这里封装为只读 unmodifiableSet ???
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }
 

@@ -21,6 +21,11 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+/**
+ *   liang fix @date 2022/7/22
+ *      netty 自定义实现的 set集合,底层是一个数组,用来替代了原来的jdk的底层selector中的实现(一个set)
+ *      数组的遍历更快
+ */
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     SelectionKey[] keys;

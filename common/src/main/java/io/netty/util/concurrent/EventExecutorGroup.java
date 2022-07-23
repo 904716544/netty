@@ -27,11 +27,22 @@ import java.util.concurrent.TimeUnit;
  * life-cycle and allows shutting them down in a global fashion.
  *
  */
+/**
+ *   liang fix @date 2022/7/18
+ *      从继承看,可以执行定时调度任务也可以调用实现普通任务的执行,同时实现了Iterable接口,从名字上也可以看出可以管理 EventExecutor group (next() & iterator() 方法)
+ *      同时提供了更多的 shutdown相关的方法
+ *
+ */
 public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
 
     /**
      * Returns {@code true} if and only if all {@link EventExecutor}s managed by this {@link EventExecutorGroup}
      * are being {@linkplain #shutdownGracefully() shut down gracefully} or was {@linkplain #isShutdown() shut down}.
+     */
+    // 2022/7/18 liang fix 返回当前所有的 EventExecutor 是否是已经 shutdown
+    /**
+     * 当且仅当该 EventExecutorGroup 管理的所有 EventExecutor
+     * 都使用 `shutdownGracefully()` 或者 `isShutdown()` 关闭时；才返回true。
      */
     boolean isShuttingDown();
 
@@ -39,6 +50,11 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
      * Shortcut method for {@link #shutdownGracefully(long, long, TimeUnit)} with sensible default values.
      *
      * @return the {@link #terminationFuture()}
+     */
+    // 2022/7/18 liang fix 优雅的关闭
+    /**
+     * 优雅地关闭 EventExecutorGroup，使用默认值调用 shutdownGracefully(long, long, TimeUnit) 方法
+     * 返回值就是 terminationFuture() 方法返回值
      */
     Future<?> shutdownGracefully();
 
@@ -55,6 +71,14 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
      * @param unit        the unit of {@code quietPeriod} and {@code timeout}
      *
      * @return the {@link #terminationFuture()}
+     */
+    /**
+     * 向执行器发出信号，表示调用者希望关闭执行器。
+     * 一旦这个方法被调用，isShuttingDown() 开始返回 true，执行器准备关闭自己。
+     * 与shutdown()不同，本方法确保在自己关闭之前的这段安静期间内(通常是几秒钟)没有任务被提交。
+     * 如果有任务是在安静期间提交的，那么它保证被接受，并且安静期间将重新开始。
+     *
+     * 返回值就是 terminationFuture() 方法返回值
      */
     Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
 

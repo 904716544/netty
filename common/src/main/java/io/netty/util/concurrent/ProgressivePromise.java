@@ -18,6 +18,10 @@ package io.netty.util.concurrent;
 /**
  * Special {@link ProgressiveFuture} which is writable.
  */
+/**
+ *   liang fix @date 2022/7/18
+ *      支持进度的Promise
+ */
 public interface ProgressivePromise<V> extends Promise<V>, ProgressiveFuture<V> {
 
     /**

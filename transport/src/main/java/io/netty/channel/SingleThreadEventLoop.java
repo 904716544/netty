@@ -28,13 +28,16 @@ import java.util.concurrent.ThreadFactory;
 
 /**
  * Abstract base class for {@link EventLoop}s that execute all its submitted tasks in a single thread.
- *
+ * liang fix
+ *  实现register()方法完成和channel的绑定:         promise.channel().unsafe().register(this, promise);
+ *  增加tailTask队列,在afterRunningAllTasks()后调用
  */
 public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor implements EventLoop {
 
     protected static final int DEFAULT_MAX_PENDING_TASKS = Math.max(16,
             SystemPropertyUtil.getInt("io.netty.eventLoop.maxPendingTasks", Integer.MAX_VALUE));
 
+    // 2022/7/20 liang fix 每次事件轮询迭代结束时执行任务队列， 即尾部任务队列
     private final Queue<Runnable> tailTasks;
 
     protected SingleThreadEventLoop(EventLoopGroup parent, ThreadFactory threadFactory, boolean addTaskWakesUp) {
@@ -84,6 +87,7 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
     @Override
     public ChannelFuture register(final ChannelPromise promise) {
         ObjectUtil.checkNotNull(promise, "promise");
+        // liang fix 调用通道 channel 拥有的 Unsafe 实例的 register 方法,将通道channel 注册到当前执行器,注意，一个执行器可以绑定多个通道 channel
         promise.channel().unsafe().register(this, promise);
         return promise;
     }
@@ -130,6 +134,7 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         return tailTasks.remove(ObjectUtil.checkNotNull(task, "task"));
     }
 
+    // 2022/7/20 liang fix 每次迭代结束时，运行所有尾部队列tailTasks任务
     @Override
     protected void afterRunningAllTasks() {
         runAllTasksFrom(tailTasks);

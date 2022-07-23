@@ -20,7 +20,11 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
-
+/**
+ *   liang fix @date 2022/7/22
+ *      包装了JDK中 selector,这里的 selectionKeys 是 netty自定义实现的一个set(底层是数组) 相比jdk中的selector的实现更加快
+ *      jdk中的selector中的selectionKeys是一个set集合
+ */
 final class SelectedSelectionKeySetSelector extends Selector {
     private final SelectedSelectionKeySet selectionKeys;
     private final Selector delegate;

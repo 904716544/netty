@@ -29,6 +29,11 @@ import static io.netty.util.concurrent.AbstractEventExecutor.*;
 /**
  * Abstract base class for {@link EventExecutorGroup} implementations.
  */
+/**
+ *   liang fix @date 2022/7/23
+ *      实现了任务group的任务的执行方式,就是调用next()返回一个具体的任务执行器 EventExecutor 去执行
+ *      但是这里没有实现next()方法,交由子类实现
+ */
 public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
     @Override
     public Future<?> submit(Runnable task) {

@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Abstract base class for {@link EventExecutor}s that want to support scheduling.
+ * 支持定时调度
  */
 public abstract class AbstractScheduledEventExecutor extends AbstractEventExecutor {
     private static final Comparator<ScheduledFutureTask<?>> SCHEDULED_FUTURE_TASK_COMPARATOR =
@@ -38,6 +39,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
 
     private static final long START_TIME = System.nanoTime();
 
+    // 2022/7/20 liang fix 用来中断当前任务,执行任务线程会循环获取任务进行执行,这个添加到任务队列后当遇到当前任务会退出循环
     static final Runnable WAKEUP_TASK = new Runnable() {
        @Override
        public void run() { } // Do nothing
@@ -123,6 +125,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      *
      * This method MUST be called only when {@link #inEventLoop()} is {@code true}.
      */
+    // 2022/7/18 liang fix 取消任务队列中的任务
     protected void cancelScheduledTasks() {
         assert inEventLoop();
         PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue = this.scheduledTaskQueue;
@@ -176,7 +179,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      * if no task is scheduled.
      */
     protected final long nextScheduledTaskDeadlineNanos() {
+        // 2022/7/23 liang fix 获取第一个定时执行的任务
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
+        // 2022/7/23 liang fix 返回这个任务的执行时间
         return scheduledTask != null ? scheduledTask.deadlineNanos() : -1;
     }
 

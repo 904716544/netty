@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 /**
  * Abstract base class for {@link OrderedEventExecutor}'s that execute all its submitted tasks in a single thread.
- *
+ * liang fix 资料 : https://www.jianshu.com/p/f7cb63f0d1a1
  */
 public abstract class SingleThreadEventExecutor extends AbstractScheduledEventExecutor implements OrderedEventExecutor {
 
@@ -56,11 +56,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(SingleThreadEventExecutor.class);
 
-    private static final int ST_NOT_STARTED = 1;
-    private static final int ST_STARTED = 2;
-    private static final int ST_SHUTTING_DOWN = 3;
-    private static final int ST_SHUTDOWN = 4;
-    private static final int ST_TERMINATED = 5;
+
+    private static final int ST_NOT_STARTED = 1;        //状态，，，未启动，未启动接受任务
+    private static final int ST_STARTED = 2;                 //   已启动，运行
+    private static final int ST_SHUTTING_DOWN = 3; //关闭中（平滑关闭）
+    private static final int ST_SHUTDOWN = 4;       //已关闭
+    private static final int ST_TERMINATED = 5;    // 终止
 
     private static final Runnable NOOP_TASK = new Runnable() {
         @Override
@@ -71,27 +72,39 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private static final AtomicIntegerFieldUpdater<SingleThreadEventExecutor> STATE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(SingleThreadEventExecutor.class, "state");
+
     private static final AtomicReferenceFieldUpdater<SingleThreadEventExecutor, ThreadProperties> PROPERTIES_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
+    // 2022/7/18 liang fix 任务队列,不同于scheduledTaskQueue(定时任务队列)
     private final Queue<Runnable> taskQueue;
 
     private volatile Thread thread;
+
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
+
     private final Executor executor;
+
+    // 2022/7/20 liang fix  线程中断状态
     private volatile boolean interrupted;
 
+    // 2022/7/20 liang fix 信号锁
     private final CountDownLatch threadLock = new CountDownLatch(1);
+
+    // 2022/7/20 liang fix netty自定义实现的钩子函数,当shutdown时调用,相比JVM的钩子函数,这里是保证了执行的顺序 & 线程安全
     private final Set<Runnable> shutdownHooks = new LinkedHashSet<Runnable>();
+    // 2022/7/18 liang fix 如果设置为true, 当且仅当 添加              一个任务时，才唤醒选择器，比如是否唤醒 select() 函数。
     private final boolean addTaskWakesUp;
+
     private final int maxPendingTasks;
     private final RejectedExecutionHandler rejectedExecutionHandler;
 
     private long lastExecutionTime;
 
     @SuppressWarnings({ "FieldMayBeFinal", "unused" })
+    // 2022/7/18 liang fix 当前状态
     private volatile int state = ST_NOT_STARTED;
 
     private volatile long gracefulShutdownQuietPeriod;
@@ -151,6 +164,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @param maxPendingTasks   the maximum number of pending tasks before new tasks will be rejected.
      * @param rejectedHandler   the {@link RejectedExecutionHandler} to use.
      */
+
+    /**
+     *liang fix
+     *  创建一个新实例
+     * @param parent            管理当前这个执行器的 EventExecutorGroup
+     * @param executor          Executor 实例，用来执行 execute(Runnable command)
+     * @param addTaskWakesUp    是否通过向任务队列 taskQueue 中添加唤醒任务 WAKEUP_TASK，来唤醒阻塞线程
+     * @param taskQueue         自定义的任务队列
+     * @param rejectedHandler   拒绝任务的处理器
+     */
     protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor,
                                         boolean addTaskWakesUp, int maxPendingTasks,
                                         RejectedExecutionHandler rejectedHandler) {
@@ -159,6 +182,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         this.maxPendingTasks = Math.max(16, maxPendingTasks);
         // 2022/7/10 liang fix 包装者模式?保证返回的是一个 Executor, 线程执行器的包装类:ThreadExecutorMap ????
         this.executor = ThreadExecutorMap.apply(executor, this);
+        // 2022/7/18 liang fix 这里的任务队列可由子类重新实现
         taskQueue = newTaskQueue(this.maxPendingTasks);
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
     }
@@ -205,13 +229,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     /**
-     * @see Queue#poll()
+     * liang fix
+     *  检索并删除任务队列的头部，如果该任务队列为空则返回 null。
+     *  这个方法不会有任何阻塞操作
      */
     protected Runnable pollTask() {
         assert inEventLoop();
         return pollTaskFrom(taskQueue);
     }
 
+    // 2022/7/20 liang fix 循环获取任务,直到遇到 WAKEUP_TASK 任务
     protected static Runnable pollTaskFrom(Queue<Runnable> taskQueue) {
         for (;;) {
             Runnable task = taskQueue.poll();
@@ -230,34 +257,66 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      *
      * @return {@code null} if the executor thread has been interrupted or waken up.
      */
+    /**
+     *   liang fix @date 2022/7/20
+     *      从任务队列取task任务,这里的任务队列有两个,一个是定时任务,一个是普通任务
+     *      定时任务优先级 > 普通任务
+     *
+     */
     protected Runnable takeTask() {
+        // 2022/7/18 liang fix 断言当前调用线程是event loop的工作线程,自我保护之一
         assert inEventLoop();
+        // liang fix 检查当前taskQueue, 如果不是BlockingQueue抛异常退出
         if (!(taskQueue instanceof BlockingQueue)) {
             throw new UnsupportedOperationException();
         }
 
         BlockingQueue<Runnable> taskQueue = (BlockingQueue<Runnable>) this.taskQueue;
+        // 2022/7/20 liang fix 无限循环一直到 取到任务 或者执行线程被中断或唤醒
         for (;;) {
+            // liang fix 从scheduledTaskQueue取一个scheduledTask, 注意方法是peek, 另外这个task有可能还没有到执行时间
             ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
             if (scheduledTask == null) {
+                // liang fix scheduledTask为null, 说明当前scheduledTaskQueue中没有定时任务
+                //  这个时候不用考虑定时任务, 直接从taskQueue中拿任务即可
                 Runnable task = null;
                 try {
+
+                    /**
+                     *   liang fix @date 2022/7/20
+                     *       从taskQueue取任务, 如果没有任务会被阻塞, 直到取到任务,或者被Interrupted
+                     *       可能有人有疑惑，如果在 taskQueue.take() 等待期间，有人添加了计划任务，那怎么办？
+                     *       AbstractScheduledEventExecutor 的 schedule(final ScheduledFutureTask<V> task) 方法实现中，
+                     *       如果不是执行器线程添加计划任务，它会直接调用execute(task), 将计划任务当成一个待执行任务添加到待执行任务队列中，唤醒线程。
+                     *       在计划任务 ScheduledFutureTask 的run 方法中，会判断如果截止时间没有到，再把自己添加到计划任务队列中，而这时它一定是在执行器线程。
+                     */
                     task = taskQueue.take();
+                    // liang fix 检查如果是WAKEUP_TASK, 则需要跳过
                     if (task == WAKEUP_TASK) {
                         task = null;
                     }
                 } catch (InterruptedException e) {
                     // Ignore
                 }
+                // liang fix 如果从taskQueue中拿任务成功,则返回, 如果没有任务或者没有成功,则返回的是null
                 return task;
             } else {
+                // liang fix scheduledTask不为null, 说明当前scheduledTaskQueue中有定时任务
+                //  但是这个定时任务可能还没有到执行时间, 因此需要检查delayNanos
                 long delayNanos = scheduledTask.delayNanos();
                 Runnable task = null;
                 if (delayNanos > 0) {
                     try {
+                        // liang fix 从taskQueue取任务, 如果没有任务则最多等待delayNanos时间, 注意这里线程会被阻塞
+                        //  如果delayNanos时间内有任务加入到taskQueue, 则可以实时取到这个任务
+                        //  线程结束阻塞继续执行, 这个task就可以返回了
+                        //  如果delayNanos时间内一直没有任务, 则timeout后线程结束阻塞,poll()方法返回null
                         task = taskQueue.poll(delayNanos, TimeUnit.NANOSECONDS);
                     } catch (InterruptedException e) {
-                        // Waken up.
+                        // liang fix 还有一种可能就是delayNanos时间内被waken up
+                        //  比如有新的scheduledTask加入, delay时间小于前面的delayNanos
+                        //  因此不能等待delayNanos timeout,需要提前结束阻塞
+                        //  Waken up.
                         return null;
                     }
                 }
@@ -266,27 +325,33 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     // scheduled tasks are never executed if there is always one task in the taskQueue.
                     // This is for example true for the read task of OIO Transport
                     // See https://github.com/netty/netty/issues/1614
+                    // liang fix 继续尝试从scheduledTaskQueue取满足条件的task到taskQueue中
                     fetchFromScheduledTaskQueue();
+                    // liang fix 然后再从taskQueue获取试试
                     task = taskQueue.poll();
                 }
 
                 if (task != null) {
+                    // liang fix 只有task不为空时才返回并退出, 否则前面的for循环就一直
                     return task;
                 }
             }
         }
     }
 
+    // 2022/7/20 liang fix 将计划任务队列中当前过期的计划任务添加到 待执行任务队列 taskQueue
     private boolean fetchFromScheduledTaskQueue() {
         if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) {
             return true;
         }
         long nanoTime = getCurrentTimeNanos();
         for (;;) {
+            //liang fix 从优先级队列中获取到执行期的元素
             Runnable scheduledTask = pollScheduledTask(nanoTime);
             if (scheduledTask == null) {
                 return true;
             }
+            //liang fix 把它加入到普通队列
             if (!taskQueue.offer(scheduledTask)) {
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
                 scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask);
@@ -372,15 +437,19 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean ranAtLeastOne = false;
 
         do {
+            //liang fix 把优先级队列里面到期需要执行的任务，加入到普通队列
             fetchedAll = fetchFromScheduledTaskQueue();
+            //liang fix 把普通队列全部执行
             if (runAllTasksFrom(taskQueue)) {
                 ranAtLeastOne = true;
             }
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
+        //liang fix 记录最后一次任务结束时间
         if (ranAtLeastOne) {
             lastExecutionTime = getCurrentTimeNanos();
         }
+        // 2022/7/20 liang fix 子类可以重写，相当于事件
         afterRunningAllTasks();
         return ranAtLeastOne;
     }
@@ -457,32 +526,40 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
      */
     protected boolean runAllTasks(long timeoutNanos) {
+        //liang fix 把优先级队列中到期的任务抓取到普通队列
         fetchFromScheduledTaskQueue();
+        //liang fix 获取普通多列当中任务
         Runnable task = pollTask();
         if (task == null) {
+            //liang fix 事件
             afterRunningAllTasks();
             return false;
         }
-
+        //liang fix 设置允许执行的时间
         final long deadline = timeoutNanos > 0 ? getCurrentTimeNanos() + timeoutNanos : 0;
         long runTasks = 0;
         long lastExecutionTime;
         for (;;) {
+            //liang fix 执行任务,实际就是使用了try catch 来包裹任务执行,调用的还是 task.run()方法
             safeExecute(task);
 
             runTasks ++;
 
             // Check timeout every 64 tasks because nanoTime() is relatively expensive.
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
+            // 2022/7/20 liang fix 每64个任务检查一下时间
             if ((runTasks & 0x3F) == 0) {
+                // 2022/7/20 liang fix 系统当前时间如果超过了允许执行的时间，则结束循环，让EventLoop线程去干其他事情
                 lastExecutionTime = getCurrentTimeNanos();
                 if (lastExecutionTime >= deadline) {
                     break;
                 }
             }
 
+            //liang fix 获取任务
             task = pollTask();
             if (task == null) {
+                //liang fix 如果task为空，记录最后一个任务的执行时间
                 lastExecutionTime = getCurrentTimeNanos();
                 break;
             }
@@ -496,6 +573,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     /**
      * Invoked before returning from {@link #runAllTasks()} and {@link #runAllTasks(long)}.
      */
+    // 2022/7/20 liang fix 在 runAllTasks() 和 runAllTasks(long) 方法返回之前调用。
     @UnstableApi
     protected void afterRunningAllTasks() { }
 
@@ -755,12 +833,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             throw new IllegalStateException("must be invoked from an event loop");
         }
 
+        //liang fix 把优先级队列全部清空
         cancelScheduledTasks();
 
         if (gracefulShutdownStartTime == 0) {
             gracefulShutdownStartTime = getCurrentTimeNanos();
         }
 
+        //liang fix 把任务全部执行完毕
         if (runAllTasks() || runShutdownHooks()) {
             if (isShutdown()) {
                 // Executor shut down - no new tasks anymore.
@@ -833,13 +913,19 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
+        // 2022/7/18 liang fix 判断是否是在当前线程中提交
         boolean inEventLoop = inEventLoop();
+        //liang fix 把任务添加到队列,注意这里是可以被不同线程调用的，所以有并发冲突问题。因此任务队列taskQueue 必须是一个线程安全的队列，就是可以处理并发问题。
         addTask(task);
         if (!inEventLoop) {
+            //liang fix 尝试启动工作线程，启动成功的话就会死循环不断地执行任务
             startThread();
+            //liang fix 如果startThread方法返回，一种情况是已经启动，或者是关闭状态
             if (isShutdown()) {
+                //liang fix 已经关闭
                 boolean reject = false;
                 try {
+                    //liang fix 删除这个任务
                     if (removeTask(task)) {
                         reject = true;
                     }
@@ -848,6 +934,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     // hope we will be able to pick-up the task before its completely terminated.
                     // In worst case we will log on termination.
                 }
+                //liang fix 如果删除成功，抛出拒绝异常
                 if (reject) {
                     reject();
                 }
@@ -949,13 +1036,17 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
     private void startThread() {
+        //liang fix 必须是未启动状态,如果关闭中，或者关闭了都不会再次启动,只有执行器处于未运行状态，才需要开启运行
         if (state == ST_NOT_STARTED) {
+            //liang fix 把状态由ST_NOT_STARTED设置为ST_STARTED，原子方式更新，只会有一个线程操作成功
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
+                    //liang fix 启动线程
                     doStartThread();
                     success = true;
                 } finally {
+                    //liang fix 如果启动失败，则把状态还原成ST_NOT_STARTED
                     if (!success) {
                         STATE_UPDATER.compareAndSet(this, ST_STARTED, ST_NOT_STARTED);
                     }
@@ -984,9 +1075,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
+        //liang fix 启动的动作封装成一个任务，executor会启动一个新的线程去执行
+        // 这里直接调用 executor.execute 方法，
+        // 我们要确保该方法每次都能提供新线程，
+        // 否则多个执行器绑定的线程是同一个，是会有问题。
+        // 因为一般 SingleThreadEventExecutor.this.run() 方法都是死循环，
+        // 这就导致它会占用线程，导致共享线程的其他执行器，是没有办法执行任务的。
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                //liang fix 获取当前线程，赋值给 thread，就是执行器线程
                 thread = Thread.currentThread();
                 if (interrupted) {
                     thread.interrupt();
@@ -995,13 +1093,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    //liang fix 需要子类实现具体逻辑 ,一般情况下，这个方法里面利用死循环，来获取待执行任务队列 taskQueue 中的任务并运行。
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
                     logger.warn("Unexpected exception from an event executor: ", t);
                 } finally {
+                    // liang fix 采用死循环，使用 CAS 方式，确保执行器状态，变成 ST_SHUTTING_DOWN，或者已经大于 ST_SHUTTING_DOWN
                     for (;;) {
                         int oldState = state;
+                        //liang fix 如果run方法结束，才会执行这里，等待状态变为》=ST_SHUTTING_DOWN时结束方法
                         if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
                                 SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
                             break;
@@ -1009,6 +1110,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     }
 
                     // Check if confirmShutdown() was called at the end of the loop.
+                    // liang fix 检查是否在循环结束时调用了confirmShutdown() 方法。
                     if (success && gracefulShutdownStartTime == 0) {
                         if (logger.isErrorEnabled()) {
                             logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
@@ -1021,7 +1123,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                         // Run all remaining tasks and shutdown hooks. At this point the event loop
                         // is in ST_SHUTTING_DOWN state still accepting tasks which is needed for
                         // graceful shutdown with quietPeriod.
+                        // liang fix
+                        //  通过死循环和confirmShutdown() 方法，确保运行所有剩余的任务和关闭钩子函数。
+                        //  此时，事件循环执行器还处于开始shutdown ST_SHUTTING_DOWN 状态，
+                        //  如果使用 shutdownGracefully 方法优雅关闭，仍然可以在安静期 quietPeriod 内接受任务。
                         for (;;) {
+                            //liang fix 等待所有任务执行完毕，所有结束钩子任务执行完毕
                             if (confirmShutdown()) {
                                 break;
                             }
@@ -1029,6 +1136,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
                         // Now we want to make sure no more tasks can be added from this point. This is
                         // achieved by switching the state. Any new tasks beyond this point will be rejected.
+                        //liang fix 设置为结束状态
+                        // 现在我们要确保不再从这里添加任务
+                        // 这是通过切换状态来实现的
+                        // 超过此点的任何新任务都将被拒绝
                         for (;;) {
                             int oldState = state;
                             if (oldState >= ST_SHUTDOWN || STATE_UPDATER.compareAndSet(
@@ -1039,9 +1150,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
                         // We have the final set of tasks in the queue now, no more can be added, run all remaining.
                         // No need to loop here, this is the final pass.
+                        // liang fix 现在队列中只剩下最后一组任务，不会再添加了，运行剩下的所有任务。 这里不需要循环，这是最后一次。
                         confirmShutdown();
                     } finally {
                         try {
+                            //liang fix 释放资源
                             cleanup();
                         } finally {
                             // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
