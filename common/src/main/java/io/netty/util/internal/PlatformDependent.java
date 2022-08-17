@@ -76,6 +76,11 @@ import static java.lang.Math.min;
  * You can disable the use of {@code sun.misc.Unsafe} if you specify
  * the system property <strong>io.netty.noUnsafe</strong>.
  */
+/**
+ * liang fix @date 2022/8/6
+ *  平台依赖相关类,底层实际使用的是
+ *  {@link PlatformDependent0}
+ */
 public final class PlatformDependent {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PlatformDependent.class);

@@ -66,13 +66,19 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
+    // TODO: 2022/8/6 内存泄露检测机制 
     static final ResourceLeakDetector<ByteBuf> leakDetector =
             ResourceLeakDetectorFactory.instance().newResourceLeakDetector(ByteBuf.class);
 
+    // 2022/7/28 liang fix 读指针
     int readerIndex;
+    // 2022/7/28 liang fix 写指针
     int writerIndex;
+    // 2022/7/28 liang fix 读写指针标记,用来回溯
     private int markedReaderIndex;
     private int markedWriterIndex;
+
+    // 2022/7/28 liang fix 最大分配容量
     private int maxCapacity;
 
     protected AbstractByteBuf(int maxCapacity) {
@@ -103,6 +109,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         this.maxCapacity = maxCapacity;
     }
 
+    // 2022/8/6 liang fix 返回读指针
     @Override
     public int readerIndex() {
         return readerIndex;
@@ -116,6 +123,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
+    // 2022/8/6 liang fix 设置读指针
     @Override
     public ByteBuf readerIndex(int readerIndex) {
         if (checkBounds) {
@@ -125,11 +133,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    // 2022/8/6 liang fix 返回写指针
     @Override
     public int writerIndex() {
         return writerIndex;
     }
 
+    // 2022/8/6 liang fix 设置写指针
     @Override
     public ByteBuf writerIndex(int writerIndex) {
         if (checkBounds) {
@@ -139,6 +149,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    // 2022/8/6 liang fix 同时设置读写指针
     @Override
     public ByteBuf setIndex(int readerIndex, int writerIndex) {
         if (checkBounds) {
@@ -195,6 +206,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    // 2022/8/6 liang fix 回溯读指针,这里是回溯到 markedReaderIndex
     @Override
     public ByteBuf resetReaderIndex() {
         readerIndex(markedReaderIndex);
@@ -213,6 +225,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    // 2022/8/6 liang fix 丢弃读指针
     @Override
     public ByteBuf discardReadBytes() {
         if (readerIndex == 0) {

@@ -36,6 +36,9 @@ import java.nio.charset.Charset;
 
 /**
  * An empty {@link ByteBuf} whose capacity and maximum capacity are all {@code 0}.
+ * liang fix 主要是用来标识空的ByteBuf,不能进行读写,这样当用户创建的ByteBuf的大小为0时,直接返回这个单例对象即可
+ *    使用的是单例模式,来减少对象的创建
+ *
  */
 public final class EmptyByteBuf extends ByteBuf {
 

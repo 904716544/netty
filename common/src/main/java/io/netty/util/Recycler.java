@@ -36,6 +36,11 @@ import static java.lang.Math.min;
  *
  * @param <T> the type of the pooled object
  */
+/**
+ * liang fix @date 2022/8/6
+ *  虽然是一个抽象类,但是只有一个没有实现的方法,那就是
+ *      {@link Recycler#newObject(Handle)}
+ */
 public abstract class Recycler<T> {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(Recycler.class);
     private static final Handle<?> NOOP_HANDLE = new Handle<Object>() {
@@ -49,6 +54,8 @@ public abstract class Recycler<T> {
             return "NOOP_HANDLE";
         }
     };
+
+    //2019-12-19 liang fix stack 默认最大容量
     private static final int DEFAULT_INITIAL_MAX_CAPACITY_PER_THREAD = 4 * 1024; // Use 4k instances as default.
     private static final int DEFAULT_MAX_CAPACITY_PER_THREAD;
     private static final int RATIO;
@@ -161,6 +168,7 @@ public abstract class Recycler<T> {
 
     @SuppressWarnings("unchecked")
     public final T get() {
+        // 2022/8/6 liang fix 最大容量标识,为0说明不需要对象的回收,不用对创建的对象构造一个钩子, 默认情况下maxCapacityPerThread= 4096
         if (maxCapacityPerThread == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }

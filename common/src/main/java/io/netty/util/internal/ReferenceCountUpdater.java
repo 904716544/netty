@@ -25,6 +25,10 @@ import io.netty.util.ReferenceCounted;
 /**
  * Common logic for {@link ReferenceCounted} implementations
  */
+/**
+ * liang fix @date 2022/8/6
+ *  对象引用的基本逻辑
+ */
 public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
     /*
      * Implementation notes:
@@ -40,6 +44,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
 
     protected ReferenceCountUpdater() { }
 
+    // 2022/8/6 liang fix 获取指定clz 的 指定field的内存地址
     public static long getUnsafeOffset(Class<? extends ReferenceCounted> clz, String fieldName) {
         try {
             if (PlatformDependent.hasUnsafe()) {
@@ -55,19 +60,24 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
 
     protected abstract long unsafeOffset();
 
+    // 2022/8/6 liang fix 初始值2
     public final int initialValue() {
         return 2;
     }
 
     public void setInitialValue(T instance) {
+        // 2022/8/6 liang fix 获取需要修改字段的偏移量,这里是引用计数 refCnt
         final long offset = unsafeOffset();
         if (offset == -1) {
+            // 2022/8/6 liang fix 这里使用的是 unsafe 的 putIntVolatile
             updater().set(instance, initialValue());
         } else {
+            // 2022/8/17 liang fix 小优化
             PlatformDependent.safeConstructPutInt(instance, offset, initialValue());
         }
     }
 
+    // 2022/8/7 liang fix 真正的引用个数, rawCnt /2
     private static int realRefCnt(int rawCnt) {
         return rawCnt != 2 && rawCnt != 4 && (rawCnt & 1) != 0 ? 0 : rawCnt >>> 1;
     }
@@ -94,10 +104,13 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
     }
 
     public final boolean isLiveNonVolatile(T instance) {
+        // 2022/8/7 liang fix refCnt的偏移量
         final long offset = unsafeOffset();
+        // 2022/8/7 liang fix 小优化,如果知道偏移量,直接获取Unsafe.getInt(),否则 Unsafe.getIntVolatile()
         final int rawCnt = offset != -1 ? PlatformDependent.getInt(instance, offset) : updater().get(instance);
 
         // The "real" ref count is > 0 if the rawCnt is even.
+        // 2022/8/6 liang fix 这里也是细节上的优化,使用 == 比 使用 & 速度更快,对象是否存活看 rawCnt 是否是奇数即可
         return rawCnt == 2 || rawCnt == 4 || rawCnt == 6 || rawCnt == 8 || (rawCnt & 1) == 0;
     }
 
@@ -115,6 +128,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         updater().set(instance, initialValue());
     }
 
+    // 2022/8/6 liang fix 增加引用计数
     public final T retain(T instance) {
         return retain0(instance, 1, 2);
     }
@@ -127,6 +141,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
 
     // rawIncrement == increment << 1
     private T retain0(T instance, final int increment, final int rawIncrement) {
+        // 2022/8/6 liang fix 利用getAndAdd更新,实际调用的是 compareAndSwapInt()方法,相比较 compareAndSet(),更快
         int oldRef = updater().getAndAdd(instance, rawIncrement);
         if (oldRef != 2 && oldRef != 4 && (oldRef & 1) != 0) {
             throw new IllegalReferenceCountException(0, increment);

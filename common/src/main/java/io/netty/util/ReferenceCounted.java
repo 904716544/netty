@@ -29,6 +29,10 @@ package io.netty.util;
  * reference count becomes 0.
  * </p>
  */
+/**
+ * liang fix @date 2022/8/6
+ *  记录对象的引用个数,用来实现对象的回收和释放
+ */
 public interface ReferenceCounted {
     /**
      * Returns the reference count of this object.  If {@code 0}, it means this object has been deallocated.

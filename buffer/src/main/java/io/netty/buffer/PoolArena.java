@@ -146,6 +146,10 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         return buf;
     }
 
+    /**
+     * liang fix @date 2022/8/7
+     *  将内存和对象进行挂钩
+     */
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
         final int sizeIdx = size2SizeIdx(reqCapacity);
 

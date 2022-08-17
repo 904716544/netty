@@ -22,6 +22,10 @@ import io.netty.util.Recycler;
  *
  * @param <T> the type of the pooled object
  */
+/**
+ *liang fix @date 2022/8/6
+ *  轻量级别对象池
+ */
 public abstract class ObjectPool<T> {
 
     ObjectPool() { }
@@ -67,6 +71,11 @@ public abstract class ObjectPool<T> {
         return new RecyclerObjectPool<T>(ObjectUtil.checkNotNull(creator, "creator"));
     }
 
+    /**
+     * liang fix @date 2022/8/6
+     *      内部的对象池,持有一个 Recycler 的引用,创建对象是通过 recycler 来进行创建,
+     *      注意 recycler创建对象实际上需要用户传入一个 ObjectCreator,
+     */
     private static final class RecyclerObjectPool<T> extends ObjectPool<T> {
         private final Recycler<T> recycler;
 

@@ -39,6 +39,10 @@ import static io.netty.util.internal.StringUtil.EMPTY_STRING;
 import static io.netty.util.internal.StringUtil.NEWLINE;
 import static io.netty.util.internal.StringUtil.simpleClassName;
 
+/**
+ * liang fix @date 2022/8/8
+ *   资源泄露探测器
+ */
 public class ResourceLeakDetector<T> {
 
     private static final String PROP_LEVEL_OLD = "io.netty.leakDetectionLevel";
@@ -580,6 +584,7 @@ public class ResourceLeakDetector<T> {
         }
     }
 
+    // 2022/8/8 liang fix 不必要的方法,当进行内存泄露日志输出时,可将当前方法对应的日志去除
     private static final AtomicReference<String[]> excludedMethods =
             new AtomicReference<String[]>(EmptyArrays.EMPTY_STRINGS);
 

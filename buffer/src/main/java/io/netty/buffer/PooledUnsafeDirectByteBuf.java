@@ -16,6 +16,7 @@
 
 package io.netty.buffer;
 
+import io.netty.util.Recycler;
 import io.netty.util.internal.ObjectPool;
 import io.netty.util.internal.ObjectPool.Handle;
 import io.netty.util.internal.ObjectPool.ObjectCreator;
@@ -27,6 +28,16 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
+    /**
+     * liang fix @date 2022/8/6
+     *    进行对象池的创建,实际上最终使用的是
+     *    {@link io.netty.util.Recycler}
+     *    这里用 ObjectPool 包装了一层
+     *    当创建对象时,调用的都是
+     *    {@link Recycler#get()} 方法,这个方法里调用抽象方法
+     *      {@link io.netty.util.Recycler#newObject(Recycler.Handle)}
+     *    需要这这里实现newObject()方法,这里的实现是保存handle
+     */
     private static final ObjectPool<PooledUnsafeDirectByteBuf> RECYCLER = ObjectPool.newPool(
             new ObjectCreator<PooledUnsafeDirectByteBuf>() {
         @Override
@@ -36,8 +47,13 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     });
 
     static PooledUnsafeDirectByteBuf newInstance(int maxCapacity) {
-        //2019-12-10 liang fix 使用 RECYCLER 进行创建
+        /**
+         *  liang fix @date 2022/8/6
+         *      实际上就是调用
+         *      {@link Recycler#get()}
+         */
         PooledUnsafeDirectByteBuf buf = RECYCLER.get();
+        // 2022/8/7 liang fix 进行buteBuf的重用,实际上就是将各个成员变量赋初始值
         buf.reuse(maxCapacity);
         return buf;
     }

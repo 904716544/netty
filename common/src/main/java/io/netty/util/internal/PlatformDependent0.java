@@ -75,6 +75,7 @@ final class PlatformDependent0 {
 
     private static final boolean UNALIGNED;
 
+    // 2022/8/6 liang fix 这里是一堆堆unsafe类的检查,设置unsafe类相关功能是否能使用,如堆外内存等
     static {
         final ByteBuffer direct;
         Field addressField = null;
@@ -89,6 +90,7 @@ final class PlatformDependent0 {
             unsafe = null;
             internalUnsafe = null;
         } else {
+            // 2022/8/6 liang fix 分配一个字节的堆外内存,用于反射获取 ByteBuffer 的相关属性
             direct = ByteBuffer.allocateDirect(1);
 
             // attempt to access field Unsafe#theUnsafe
@@ -610,10 +612,24 @@ final class PlatformDependent0 {
         return UNSAFE.getInt(object, fieldOffset);
     }
 
+    /**
+     * liang fix @date 2022/8/17
+     *      UNSAFE.putInt(object, fieldOffset, value);
+     *      UNSAFE.storeFence();
+     *      这里的底层实际上就是c++上设置了一个 volatile jint local_dummy = 0 ( c里volatile就是保证这块代码不会被优化)
+     *      -
+     *      UNSAFE.putIntVolatile(object, fieldOffset, value)
+     *      这里会按照 volatile的方式进行复制
+     */
     static void safeConstructPutInt(Object object, long fieldOffset, int value) {
         if (STORE_FENCE_AVAILABLE) {
+            //liang fix 这里是将一个volatile 的变量使用普通变量的形式进行赋值,在x86下就是减少了 lock 指令的调用
+            //  类似的有 UNSAFE.putOrderedInt() 不过 UNSAFE.putOrderedInt() 这个方法在模板解释器中是UNSAFE.putIntVolatile 一样,
+            //  只在JIT中进行了优化,因此下面这种方式比  UNSAFE.putOrderedInt() 更快,从头到尾都没有使用到 lock指令
+            //  ,UNSAFE.putOrderedInt() 这个会在JIT优化之前使用到 lock指令,JIT优化过后和下面一样
             UNSAFE.putInt(object, fieldOffset, value);
             UNSAFE.storeFence();
+
         } else {
             UNSAFE.putIntVolatile(object, fieldOffset, value);
         }

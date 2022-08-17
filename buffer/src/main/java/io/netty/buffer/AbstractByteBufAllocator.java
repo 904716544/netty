@@ -26,6 +26,8 @@ import io.netty.util.internal.StringUtil;
 
 /**
  * Skeletal {@link ByteBufAllocator} implementation to extend.
+ * liang fix
+ *  抽象实现
  */
 public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
     static final int DEFAULT_INITIAL_CAPACITY = 256;
@@ -37,6 +39,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         ResourceLeakDetector.addExclusions(AbstractByteBufAllocator.class, "toLeakAwareBuffer");
     }
 
+    // 2022/8/8 liang fix 将普通ByteBuf转为具有内存泄漏检测功能的ByteBuf
     protected static ByteBuf toLeakAwareBuffer(ByteBuf buf) {
         ResourceLeakTracker<ByteBuf> leak;
         switch (ResourceLeakDetector.getLevel()) {
@@ -81,7 +84,9 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         return buf;
     }
 
+    // 2022/8/8 liang fix 默认为true,默认情况下即使用DirectByteBuf
     private final boolean directByDefault;
+    // 2022/8/8 liang fix 使用单例模式来减少空ByteBuf的创建
     private final ByteBuf emptyBuf;
 
     /**
@@ -247,6 +252,11 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
     public String toString() {
         return StringUtil.simpleClassName(this) + "(directByDefault: " + directByDefault + ')';
     }
+
+    //liang fix 计算ByteBuffer需要扩展时使用的容量
+    //  如果minNewCapacity等于threshold，就直接返回。
+    //  大于就返回增加threshold的数值。
+    //  小于从64开始*2，直到超过minNewCapacity。
 
     @Override
     public int calculateNewCapacity(int minNewCapacity, int maxCapacity) {

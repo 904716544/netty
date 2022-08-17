@@ -14,7 +14,10 @@
  * under the License.
  */
 package io.netty.buffer;
-
+/**
+ * liang fix @date 2022/8/8
+ *      一个接口,用来监控ByteBuf的Heap和Direct 占用内存的情况
+ */
 public interface ByteBufAllocatorMetricProvider {
 
     /**

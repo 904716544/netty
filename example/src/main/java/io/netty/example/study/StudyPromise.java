@@ -3,6 +3,8 @@ package io.netty.example.study;
 import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Promise;
 
+import java.util.concurrent.locks.LockSupport;
+
 /**
  *   liang fix @date 2022/7/13
  *      https://javamana.com/2022/02/202202130358592032.html
@@ -14,5 +16,7 @@ public class StudyPromise {
          *   liang fix @date 2022/7/13
          *      {@link Promise}
          */
+
+
     }
 }

@@ -35,28 +35,54 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * liang fix @date 2022/8/8
+ *   成员变量默认值以及含义 :  https://www.modb.pro/db/123494
+ */
 public class PooledByteBufAllocator extends AbstractByteBufAllocator implements ByteBufAllocatorMetricProvider {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PooledByteBufAllocator.class);
+    // 2022/8/8 liang fix cpu core * 2
     private static final int DEFAULT_NUM_HEAP_ARENA;
+    // 2022/8/8 liang fix cpu core * 2
     private static final int DEFAULT_NUM_DIRECT_ARENA;
 
+    // 2022/8/8 liang fix 默认 pageSize = 8kb
     private static final int DEFAULT_PAGE_SIZE;
+    // 2022/8/8 liang fix 注意,以及修改成了 4MB,因此去除了 tiny
     private static final int DEFAULT_MAX_ORDER; // 8192 << 9 = 4 MiB per chunk
+
+    // 2022/8/8 liang fix small 缓存池大小 256
     private static final int DEFAULT_SMALL_CACHE_SIZE;
+
+    // 2022/8/8 liang fix normal 缓存池大小 64
     private static final int DEFAULT_NORMAL_CACHE_SIZE;
+
+    // 2022/8/8 liang fix 能被cache缓存的buffer线程,这里是 32kb
     static final int DEFAULT_MAX_CACHED_BUFFER_CAPACITY;
+
+    // 2022/8/8 liang fix 分配次数阈值，超过后释放内存池,默认是8192
     private static final int DEFAULT_CACHE_TRIM_INTERVAL;
+
     private static final long DEFAULT_CACHE_TRIM_INTERVAL_MILLIS;
+
+    // 2022/8/8 liang fix 默认false，使用线程缓存,注意之前版本是true
+    //              https://github.com/netty/netty/issues/8536.
     private static final boolean DEFAULT_USE_CACHE_FOR_ALL_THREADS;
+
+    // 2022/8/8 liang fix 直接内存的校准对齐参数,默认是0
     private static final int DEFAULT_DIRECT_MEMORY_CACHE_ALIGNMENT;
+
+    // 2022/8/8 liang fix 指定PoolChunk缓存ByteBuffer对象的最大数量,默认是1023
     static final int DEFAULT_MAX_CACHED_BYTEBUFFERS_PER_CHUNK;
 
+    // 2022/8/8 liang fix pageSize大小最小是4kb, 默认情况下是 8kb
     private static final int MIN_PAGE_SIZE = 4096;
     private static final int MAX_CHUNK_SIZE = (int) (((long) Integer.MAX_VALUE + 1) / 2);
 
     private static final int CACHE_NOT_USED = 0;
 
+    // 2022/8/8 liang fix 用来进行当前cache中的 SMALL_CACHE 和 NORMAL_CACHE 对象的trim(),就是内存释放和对象回收??
     private final Runnable trimTask = new Runnable() {
         @Override
         public void run() {
@@ -67,18 +93,24 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     static {
         int defaultAlignment = SystemPropertyUtil.getInt(
                 "io.netty.allocator.directMemoryCacheAlignment", 0);
+        // 2022/8/8 liang fix pageSize 大小 8kb
         int defaultPageSize = SystemPropertyUtil.getInt("io.netty.allocator.pageSize", 8192);
         Throwable pageSizeFallbackCause = null;
         try {
+            // 2022/8/8 liang fix 一个校验,这里可不关注
             validateAndCalculatePageShifts(defaultPageSize, defaultAlignment);
         } catch (Throwable t) {
             pageSizeFallbackCause = t;
             defaultPageSize = 8192;
             defaultAlignment = 0;
         }
+        // 2022/8/8 liang fix 默认页大小
         DEFAULT_PAGE_SIZE = defaultPageSize;
+        // 2022/8/8 liang fix 直接内存的校准对齐参数,默认为0,可不关注
         DEFAULT_DIRECT_MEMORY_CACHE_ALIGNMENT = defaultAlignment;
 
+        // 2022/8/8 liang fix 由于ChunkSize 从 16MB -> 4MB,因此 这里MaxOrder也变成了 11 -> 9
+        //              4MB = 8KB * 2^9
         int defaultMaxOrder = SystemPropertyUtil.getInt("io.netty.allocator.maxOrder", 9);
         Throwable maxOrderFallbackCause = null;
         try {
@@ -100,6 +132,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
          *
          * See https://github.com/netty/netty/issues/3888.
          */
+        // 2022/8/8 liang fix PoolAreana 个数,和EventLoops相同,默认情况下 = cpu core * 2
         final int defaultMinNumArena = NettyRuntime.availableProcessors() * 2;
         final int defaultChunkSize = DEFAULT_PAGE_SIZE << DEFAULT_MAX_ORDER;
         DEFAULT_NUM_HEAP_ARENA = Math.max(0,
@@ -116,15 +149,19 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
                                 PlatformDependent.maxDirectMemory() / defaultChunkSize / 2 / 3)));
 
         // cache sizes
+        // 2022/8/8 liang fix small 缓存池大小
         DEFAULT_SMALL_CACHE_SIZE = SystemPropertyUtil.getInt("io.netty.allocator.smallCacheSize", 256);
+        // 2022/8/8 liang fix normal 缓存池大小
         DEFAULT_NORMAL_CACHE_SIZE = SystemPropertyUtil.getInt("io.netty.allocator.normalCacheSize", 64);
 
         // 32 kb is the default maximum capacity of the cached buffer. Similar to what is explained in
         // 'Scalable memory allocation using jemalloc'
+        // 2022/8/8 liang fix 能被cache缓存的buffer线程,这里是 32kb
         DEFAULT_MAX_CACHED_BUFFER_CAPACITY = SystemPropertyUtil.getInt(
                 "io.netty.allocator.maxCachedBufferCapacity", 32 * 1024);
 
         // the number of threshold of allocations when cached entries will be freed up if not frequently used
+        // 2022/8/8 liang fix 分配次数阈值，超过后释放内存池,默认是8192
         DEFAULT_CACHE_TRIM_INTERVAL = SystemPropertyUtil.getInt(
                 "io.netty.allocator.cacheTrimInterval", 8192);
 
@@ -145,11 +182,14 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
                     "io.netty.allocator.cacheTrimIntervalMillis", 0);
         }
 
+        // 2022/8/8 liang fix 默认false，使用线程缓存
         DEFAULT_USE_CACHE_FOR_ALL_THREADS = SystemPropertyUtil.getBoolean(
                 "io.netty.allocator.useCacheForAllThreads", false);
 
         // Use 1023 by default as we use an ArrayDeque as backing storage which will then allocate an internal array
         // of 1024 elements. Otherwise we would allocate 2048 and only use 1024 which is wasteful.
+
+        // 2022/8/8 liang fix 指定PoolChunk缓存ByteBuffer对象的最大数量,默认是1023
         DEFAULT_MAX_CACHED_BYTEBUFFERS_PER_CHUNK = SystemPropertyUtil.getInt(
                 "io.netty.allocator.maxCachedByteBuffersPerChunk", 1023);
 
@@ -187,6 +227,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     private final int normalCacheSize;
     private final List<PoolArenaMetric> heapArenaMetrics;
     private final List<PoolArenaMetric> directArenaMetrics;
+    // 2022/8/8 liang fix 内存缓存,用户缓存线程申请的内存,提高分配效率
     private final PoolThreadLocalCache threadCache;
     private final int chunkSize;
     private final PooledByteBufAllocatorMetric metric;
@@ -262,6 +303,18 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
              useCacheForAllThreads, directMemoryCacheAlignment);
     }
 
+    /**
+     *liang fix 最后的构造函数,默认情况下值
+     * @param preferDirect   true
+     * @param nHeapArena     cpu.core * 2
+     * @param nDirectArena   cpu.core * 2
+     * @param pageSize       8192 = 8kb
+     * @param maxOrder       9  => 4MB = pageSize * 2^9
+     * @param smallCacheSize  256
+     * @param normalCacheSize  64
+     * @param useCacheForAllThreads false
+     * @param directMemoryCacheAlignment 直接内存对齐,默认是0
+     */
     public PooledByteBufAllocator(boolean preferDirect, int nHeapArena, int nDirectArena, int pageSize, int maxOrder,
                                   int smallCacheSize, int normalCacheSize,
                                   boolean useCacheForAllThreads, int directMemoryCacheAlignment) {
@@ -424,6 +477,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
              */
             buf = directArena.allocate(cache, initialCapacity, maxCapacity);
         } else {
+            // 2022/8/7 liang fix 这里一般进入不了,可忽略
             buf = PlatformDependent.hasUnsafe() ?
                     UnsafeByteBufUtil.newUnsafeDirectByteBuf(this, initialCapacity, maxCapacity) :
                     new UnpooledDirectByteBuf(this, initialCapacity, maxCapacity);
@@ -533,6 +587,15 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         threadCache.remove();
     }
 
+    /**
+     * liang fix @date 2022/8/8
+     *        只有3种情况才会真正使用到cache
+     *          1. JVM参数 useCacheForAllThreads 启动,可通过-Dio.netty.allocator.useCacheForAllThread 开启
+     *          2. 使用了 FastThreadLocalThread
+     *          3. 当前线程是 EventExecutor 创建
+     *        其他情况
+     *          返回的还是PoolThreadCache,但是中的 smallCacheSize 和 normalCacheSize 都是空,最后调用了Unpool进行创建
+     */
     private final class PoolThreadLocalCache extends FastThreadLocal<PoolThreadCache> {
         private final boolean useCacheForAllThreads;
 
