@@ -6,7 +6,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
 
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.LongAdder;
 
 public class StudyByteBuf {
     volatile int x = 1;
@@ -22,6 +21,7 @@ public class StudyByteBuf {
 //
 //        buffer1.release();
 
+        System.setProperty("io.netty.allocator.useCacheForAllThreads","true");
 
         /**
          *   liang fix @date 2022/7/10 

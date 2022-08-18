@@ -49,7 +49,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     // 2022/8/8 liang fix 默认 pageSize = 8kb
     private static final int DEFAULT_PAGE_SIZE;
-    // 2022/8/8 liang fix 注意,以及修改成了 4MB,因此去除了 tiny
+    // 2022/8/8 liang fix 注意,已经修改成了 4MB,因此去除了 tiny
     private static final int DEFAULT_MAX_ORDER; // 8192 << 9 = 4 MiB per chunk
 
     // 2022/8/8 liang fix small 缓存池大小 256
@@ -450,9 +450,8 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
          *              而我们的 directArenas 数组本身 也是 cpu * 2
          *              因此,每个Nio线程 包含一个 cache (包含一个 线程独有的 PoolArena) 防止了锁的竞争
          *              {@link PoolThreadCache#PoolThreadCache(PoolArena, PoolArena, int, int, int, int, int)}
-         *              同时,在创建 PoolThreadCache 的同时,这里又是创建有 3个数组,存储不同规格的缓存
+         *              同时,在创建 PoolThreadCache 的同时,这里又是创建有 2个数组,存储不同规格的缓存
          *                     PoolArena<ByteBuffer> directArena    线程独有
-         *                     SubPageMemoryRegionCache tinySubPageDirectCaches  0 - 512B      32长度
          *                     SubPageMemoryRegionCache smallSubPageDirectCaches 512 - 8192B   4长度
          *                     SubPageMemoryRegionCache normalDirectCaches   8kb - 16kb        2长度
          *               {@link io.netty.buffer.PoolThreadCache.SubPageMemoryRegionCache#SubPageMemoryRegionCache(int, PoolArena.SizeClass)}
@@ -606,6 +605,8 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         @Override
         protected synchronized PoolThreadCache initialValue() {
             final PoolArena<byte[]> heapArena = leastUsedArena(heapArenas);
+            //liang fix 这里的 PoolArena 是和线程池对应的,因此这里每次调用时是找到最少线程使用的那个 PoolArena
+            //  理论上,每个线程只会有一个 PoolArena ?? 默认情况下启动的线程都是 cpu * 2
             final PoolArena<ByteBuffer> directArena = leastUsedArena(directArenas);
 
             final Thread current = Thread.currentThread();
@@ -638,6 +639,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             threadCache.free(false);
         }
 
+        // 2022/8/18 liang fix 找到最少线程使用的那个PoolArena进行返回
         private <T> PoolArena<T> leastUsedArena(PoolArena<T>[] arenas) {
             if (arenas == null || arenas.length == 0) {
                 return null;

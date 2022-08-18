@@ -47,6 +47,7 @@ final class PoolThreadCache {
     private static final int INTEGER_SIZE_MINUS_ONE = Integer.SIZE - 1;
 
     final PoolArena<byte[]> heapArena;
+    // 2022/8/18 liang fix 已经修改成了只有两级 small 和 normal
     final PoolArena<ByteBuffer> directArena;
 
     // Hold the caches for the different size classes, which are small and normal.
@@ -55,6 +56,7 @@ final class PoolThreadCache {
     private final MemoryRegionCache<byte[]>[] normalHeapCaches;
     private final MemoryRegionCache<ByteBuffer>[] normalDirectCaches;
 
+    // 2022/8/18 liang fix 分配次数阈值,当次数 > 8192 后才会触发回收
     private final int freeSweepAllocationThreshold;
     private final AtomicBoolean freed = new AtomicBoolean();
 
@@ -63,6 +65,16 @@ final class PoolThreadCache {
     // TODO: Test if adding padding helps under contention
     //private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
 
+    /**
+     * 池线程缓存
+     *
+     * @param heapArena
+     * @param directArena
+     * @param smallCacheSize               small cache  数组大小 256  =》
+     * @param normalCacheSize              normal cache 数组大小 64   =》
+     * @param maxCachedBufferCapacity      最大缓存的buffer大小限制 32768 = 32kb
+     * @param freeSweepAllocationThreshold 分配次数阈值,当次数 > 8192 后才会触发回收
+     */
     PoolThreadCache(PoolArena<byte[]> heapArena, PoolArena<ByteBuffer> directArena,
                     int smallCacheSize, int normalCacheSize, int maxCachedBufferCapacity,
                     int freeSweepAllocationThreshold) {

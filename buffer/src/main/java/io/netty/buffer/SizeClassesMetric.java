@@ -22,7 +22,7 @@ public interface SizeClassesMetric {
 
     /**
      * Computes size from lookup table according to sizeIdx.
-     *
+     * liang fix 根据 siezIdx 获取size大小
      * @return size
      */
     int sizeIdx2size(int sizeIdx);
