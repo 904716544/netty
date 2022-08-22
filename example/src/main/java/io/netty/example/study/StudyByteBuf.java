@@ -33,6 +33,7 @@ public class StudyByteBuf {
          *      {@link io.netty.buffer.AbstractReferenceCountedByteBuf}
          *      {@link io.netty.buffer.PooledByteBuf}
          *      {@link io.netty.buffer.ByteBufAllocatorMetricProvider}
+         *      {@link io.netty.buffer.SizeClasses}
          *
          */
 
@@ -42,12 +43,17 @@ public class StudyByteBuf {
         PooledByteBufAllocator allocator = PooledByteBufAllocator.DEFAULT;
 
         // 2022/8/6 liang fix 2.使用allocator 进行内存分配
-        ByteBuf buffer = allocator.buffer(1024);
-        buffer.writeByte(1);
-
-        // 2022/8/6 liang fix 3.使用allocator 回收
+        ByteBuf buffer = allocator.buffer(1023 * 4);
         buffer.release();
 
+        ByteBuf buffer2 = allocator.buffer(1023 * 4);
+        ByteBuf buffer3 = allocator.buffer(1023 * 4);
+
+        buffer.writeByte(1);
+
+        // 2022/8/6 liang fix 3.使用allocator 回收,当当前对象上引用为空时,还需要对分配的内存进行回收
+        buffer.release();
+        buffer2.release();
 
         // 2022/8/6 liang fix 4.
 

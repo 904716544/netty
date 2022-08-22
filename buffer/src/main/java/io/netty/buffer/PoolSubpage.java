@@ -78,6 +78,7 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
                 bitmap[i] = 0;
             }
         }
+        // 2022/8/23 liang fix 将 PoolArena中的 head指向这块内存
         addToPool(head);
     }
 

@@ -45,6 +45,7 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
     final int directMemoryCacheAlignment;
     private final PoolSubpage<T>[] smallSubpagePools;
 
+    // 2022/8/20 liang fix PoolChunk系列,用来记录当前PoolArena指向的PoolChunk的使用的内存情况,方便对chunkList进行调整
     private final PoolChunkList<T> q050;
     private final PoolChunkList<T> q025;
     private final PoolChunkList<T> q000;
@@ -189,10 +190,8 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
      * @param reqCapacity	申请内存容量大小
      */
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
-        // #1 根据申请容量大小查表确定对应数组下标序号。
-        // 具体操作就是先确定 reqCapacity 在第几组，然后在组内的哪个位置。两者相加就是最后的值了
+        // liang fix 根据申请容量大小查表确定对应数组下标序号, 之后从下标号到 sizeIdx2sizeTab 找到最适合的内存大小
         final int sizeIdx = size2SizeIdx(reqCapacity);
-
         // #2 根据下标序号就可以得到对应的规格值
         if (sizeIdx <= smallMaxSizeIdx) {
             // #2-1 下标序号<=「smallMaxSizeIdx」，表示申请容量大小<=pageSize，属于「Small」级别内存分配
@@ -221,7 +220,7 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
      */
     private void tcacheAllocateSmall(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity,
                                      final int sizeIdx) {
-
+        // 2022/8/20 liang fix 尝试使用 cache 进行分配
         if (cache.allocateSmall(this, buf, reqCapacity, sizeIdx)) {
             // was able to allocate out of the cache so move on
             return;
@@ -236,12 +235,15 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         head.lock();
         try {
             final PoolSubpage<T> s = head.next;
+
+            //liang fix 如果相等，表示还没有内存块可以用。这个head只是一个引用，并不会有内存，实际存储内存的地方是head.next。
             needsNormalAllocation = s == head;
             if (!needsNormalAllocation) {
                 assert s.doNotDestroy && s.elemSize == sizeIdx2size(sizeIdx) : "doNotDestroy=" +
                         s.doNotDestroy + ", elemSize=" + s.elemSize + ", sizeIdx=" + sizeIdx;
                 long handle = s.allocate();
                 assert handle >= 0;
+                //初始化内存
                 s.chunk.initBufWithSubpage(buf, null, handle, reqCapacity, cache);
             }
         } finally {
@@ -302,7 +304,7 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
      */
     private void allocateNormal(PooledByteBuf<T> buf, int reqCapacity, int sizeIdx, PoolThreadCache threadCache) {
         assert lock.isHeldByCurrentThread();
-        // #1 尝试从「PoolChunkList」链表中分配（寻找现有的「PoolChunk」进行内存分配）
+        //liang fix #1 尝试从「PoolChunkList」链表中分配（寻找现有的「PoolChunk」进行内存分配）
         if (q050.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
             q025.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
             q000.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
@@ -312,9 +314,9 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         }
 
         // Add a new chunk.
-        // #2 新建一个「PoolChunk」对象
+        //liang fix #2 走到这里说明已有的PoolChunk无法满足对当前大小的内存的分配,需要重新申请堆外内存
         PoolChunk<T> c = newChunk(pageSize, nPSizes, pageShifts, chunkSize);
-        // #3 使用新的「PoolChunk」完成内存分配
+        //liang fix #3 使用新的「PoolChunk」完成内存分配
         boolean success = c.allocate(buf, reqCapacity, sizeIdx, threadCache);
         assert success;
         // #4 根据最低的添加到「PoolChunkList」节点中
@@ -342,7 +344,7 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
     }
 
     /**
-     * 免费
+     * liang fix 当在pooled 下,需要对内存进行回收
      *
      * @param chunk        块
      * @param nioBuffer    nio缓冲
@@ -357,12 +359,14 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
             activeBytesHuge.add(-size);
             deallocationsHuge.increment();
         } else {
+            // 2022/8/21 liang fix 判断要回收的内存是 normal 还是 small
             SizeClass sizeClass = sizeClass(handle);
+            // 2022/8/21 liang fix 第一种回收, cache回收
             if (cache != null && cache.add(this, chunk, nioBuffer, handle, normCapacity, sizeClass)) {
                 // cached so not free it.
                 return;
             }
-
+            // 2022/8/21 liang fix 第二种回收, 将地址返回到chunk中
             freeChunk(chunk, handle, normCapacity, sizeClass, nioBuffer, false);
         }
     }
@@ -1010,6 +1014,7 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         @Override
         protected PoolChunk<ByteBuffer> newChunk(int pageSize, int maxPageIdx,
             int pageShifts, int chunkSize) {
+            // 2022/8/20 liang fix 默认情况下不需要考虑内存对齐
             if (directMemoryCacheAlignment == 0) {
                 ByteBuffer memory = allocateDirect(chunkSize);
                 return new PoolChunk<ByteBuffer>(this, memory, memory, pageSize, pageShifts,

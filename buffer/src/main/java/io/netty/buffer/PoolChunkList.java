@@ -104,6 +104,7 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
             return false;
         }
 
+        // 2022/8/21 liang fix 判断是否需要将当前的PoolChunk 在 PoolChunkList上移动
         for (PoolChunk<T> cur = head; cur != null; cur = cur.next) {
             if (cur.allocate(buf, reqCapacity, sizeIdx, threadCache)) {
                 if (cur.freeBytes <= freeMinThreshold) {

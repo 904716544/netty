@@ -35,6 +35,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
     protected long handle;
     protected T memory;
     protected int offset;
+    // 2022/8/21 liang fix 本次
     protected int length;
     int maxLength;
     PoolThreadCache cache;

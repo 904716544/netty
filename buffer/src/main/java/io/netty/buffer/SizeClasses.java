@@ -109,6 +109,10 @@ abstract class SizeClasses implements SizeClassesMetric {
     private final int[] pageIdx2sizeTab;
 
     // lookup table for sizeIdx <= smallMaxSizeIdx
+    //liang fix 记录当前PoolArena支持切分的内存规格,这里分配small & normal 两种,其他分配的内存就不由PoolArena负责
+    //  当需要分配内存,首先根据指定的内存大小找到他的sizeIdx,从这个表就能拿到应该分配的内存规格,一共 68 种
+    //  small 39 种  -->  [16b,... , 28KB]
+    //  normal 29 种 --> [32KB, ... , 4MB]
     private final int[] sizeIdx2sizeTab;
 
     // lookup table used for size <= lookupMaxClass
@@ -181,6 +185,7 @@ abstract class SizeClasses implements SizeClassesMetric {
         this.directMemoryCacheAlignment = directMemoryCacheAlignment;
 
         //generate lookup tables
+        // 2022/8/20 liang fix 真正的重点,生成从size -> index & index -> size 的数据关系
         sizeIdx2sizeTab = newIdx2SizeTab(sizeClasses, nSizes, directMemoryCacheAlignment);
         pageIdx2sizeTab = newPageIdx2sizeTab(sizeClasses, nSizes, nPSizes, directMemoryCacheAlignment);
         size2idxTab = newSize2idxTab(lookupMaxSize, sizeClasses);
@@ -321,7 +326,7 @@ abstract class SizeClasses implements SizeClassesMetric {
         if (size > chunkSize) {
             return nSizes;
         }
-
+        // 2022/8/20 liang fix 对齐,默认情况下 directMemoryCacheAlignment 就是空,这里不需要考虑
         size = alignSizeIfNeeded(size, directMemoryCacheAlignment);
 
         if (size <= lookupMaxSize) {

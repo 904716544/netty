@@ -47,7 +47,7 @@ final class PoolThreadCache {
     private static final int INTEGER_SIZE_MINUS_ONE = Integer.SIZE - 1;
 
     final PoolArena<byte[]> heapArena;
-    // 2022/8/18 liang fix 已经修改成了只有两级 small 和 normal
+    // 2022/8/18 liang fix 只想directArena
     final PoolArena<ByteBuffer> directArena;
 
     // Hold the caches for the different size classes, which are small and normal.
@@ -83,9 +83,10 @@ final class PoolThreadCache {
         this.heapArena = heapArena;
         this.directArena = directArena;
         if (directArena != null) {
+            // 2022/8/23 liang fix 开启cache情况下,会创建长度是39的存储是MemoryRegionCache 的缓存cache
             smallSubPageDirectCaches = createSubPageCaches(
                     smallCacheSize, directArena.numSmallSubpagePools);
-
+            // 2022/8/23 liang fix 这里创建的数目不一定,默认情况下是一个
             normalDirectCaches = createNormalCaches(
                     normalCacheSize, maxCachedBufferCapacity, directArena);
 
@@ -176,6 +177,7 @@ final class PoolThreadCache {
             // no cache found so just return false here
             return false;
         }
+        // 2022/8/23 liang fix 尝试从内存分配
         boolean allocated = cache.allocate(buf, reqCapacity, this);
         if (++ allocations >= freeSweepAllocationThreshold) {
             allocations = 0;
@@ -385,7 +387,9 @@ final class PoolThreadCache {
             if (entry == null) {
                 return false;
             }
+            // 2022/8/23 liang fix 初始化Buf
             initBuf(entry.chunk, entry.nioBuffer, entry.handle, buf, reqCapacity, threadCache);
+            // 2022/8/23 liang fix 对象回收
             entry.recycle();
 
             // allocations is not thread-safe which is fine as this is only called from the same thread all time.
