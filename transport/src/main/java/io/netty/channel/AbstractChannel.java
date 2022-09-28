@@ -505,6 +505,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                //liang fix 真正调用register将NIO上的channel注册到selector上,不过注意这里只是注册了,
+                // 但是没有指定具体 instert 事件,这里是0,空事件,需要再init初始化完handle之后才能真正的绑定accept事件
                 doRegister();
                 neverRegistered = false;
                 registered = true;
@@ -513,6 +515,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 2022/9/26 liang fix 设置当前的future进行返回
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing

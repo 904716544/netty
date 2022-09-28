@@ -56,6 +56,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     private static final Method OPEN_SERVER_SOCKET_CHANNEL_WITH_FAMILY =
             SelectorProviderUtil.findOpenMethod("openServerSocketChannel");
 
+    // 2022/9/25 liang fix 绑定NIO中的 ServerSocketChannel
     private static ServerSocketChannel newChannel(SelectorProvider provider, InternetProtocolFamily family) {
         try {
             ServerSocketChannel channel =
@@ -70,6 +71,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     /**
      * Create a new instance
+     */
+    /**
+     * liang fix Create a new instance 启动时newInstance()调用这个构造器
+     *  DEFAULT_SELECTOR_PROVIDER 获取当前系统中的selector
      */
     public NioServerSocketChannel() {
         this(DEFAULT_SELECTOR_PROVIDER);
@@ -93,6 +98,11 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        /**
+         * liang fix @date 2022/9/25
+         *  这里会调用父类来,设置NIO中channel为非阻塞模式 configureBlocking(false)
+         *  设置SelectionKey.OP_ACCEPT, 注意这里没有绑定到channel上
+         */
         super(null, channel, SelectionKey.OP_ACCEPT);
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }

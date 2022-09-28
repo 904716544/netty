@@ -30,6 +30,7 @@ public class DefaultAttributeMap implements AttributeMap {
 
     private static final AtomicReferenceFieldUpdater<DefaultAttributeMap, DefaultAttribute[]> ATTRIBUTES_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultAttributeMap.class, DefaultAttribute[].class, "attributes");
+
     private static final DefaultAttribute[] EMPTY_ATTRIBUTES = new DefaultAttribute[0];
 
     /**

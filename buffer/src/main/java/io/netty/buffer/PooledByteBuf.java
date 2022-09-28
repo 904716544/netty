@@ -45,6 +45,10 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
     @SuppressWarnings("unchecked")
     protected PooledByteBuf(Handle<? extends PooledByteBuf<T>> recyclerHandle, int maxCapacity) {
         super(maxCapacity);
+        /**
+         * liang fix @date 2022/8/23
+         *  {@link io.netty.util.Recycler.DefaultHandle}
+         */
         this.recyclerHandle = (Handle<PooledByteBuf<T>>) recyclerHandle;
     }
 

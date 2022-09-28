@@ -32,6 +32,7 @@ import static java.lang.Math.min;
  * amount of the allocated buffer two times consecutively.  Otherwise, it keeps
  * returning the same prediction.
  */
+// 2022/9/27 liang fix 自适应ByteBufAllocator
 public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
 
     static final int DEFAULT_MINIMUM = 64;
@@ -42,6 +43,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     private static final int INDEX_INCREMENT = 4;
     private static final int INDEX_DECREMENT = 1;
 
+    // 2022/9/27 liang fix 存储不同规格的内存大小
     private static final int[] SIZE_TABLE;
 
     static {
@@ -55,6 +57,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             sizeTable.add(i);
         }
 
+        // 2022/9/27 liang fix 构建size_table数组,用来决定每次分配的内存的大小
         SIZE_TABLE = new int[sizeTable.size()];
         for (int i = 0; i < SIZE_TABLE.length; i ++) {
             SIZE_TABLE[i] = sizeTable.get(i);
@@ -67,6 +70,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
+    // 2022/9/27 liang fix 查找合适规格的ByteBuf大小
     private static int getSizeTableIndex(final int size) {
         for (int low = 0, high = SIZE_TABLE.length - 1;;) {
             if (high < low) {
@@ -101,7 +105,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         HandleImpl(int minIndex, int maxIndex, int initial) {
             this.minIndex = minIndex;
             this.maxIndex = maxIndex;
-
+            // 2022/9/27 liang fix
             index = getSizeTableIndex(initial);
             nextReceiveBufferSize = SIZE_TABLE[index];
         }
@@ -112,12 +116,16 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             // This helps adjust more quickly when large amounts of data is pending and can avoid going back to
             // the selector to check for more data. Going back to the selector can add significant latency for large
             // data transfers.
+            // 2022/9/27 liang fix 当当前的BuyeBuf写满时,需要进行判断进行伸缩
             if (bytes == attemptedBytesRead()) {
+                // 2022/9/27 liang fix 进行伸缩的方法
                 record(bytes);
             }
+            // 2022/9/27 liang fix 记录最后一次读取到的数据的位置
             super.lastBytesRead(bytes);
         }
 
+        // 2022/9/27 liang fix 进行预估,返回下一次应该申请的内存地址
         @Override
         public int guess() {
             return nextReceiveBufferSize;
@@ -145,8 +153,11 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         }
     }
 
+    // 2022/9/27 liang fix
     private final int minIndex;
+    // 2022/9/27 liang fix
     private final int maxIndex;
+    // 2022/9/27 liang fix 初始化 2048字节
     private final int initial;
 
     /**

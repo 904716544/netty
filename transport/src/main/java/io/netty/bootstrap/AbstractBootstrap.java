@@ -243,6 +243,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * Create a new {@link Channel} and bind it.
      */
     public ChannelFuture bind(int inetPort) {
+        // 2022/9/25 liang fix 端口绑定工作
         return bind(new InetSocketAddress(inetPort));
     }
 
@@ -343,7 +344,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        // 2022/7/9 liang fix 初始化完成进行注册
+        // 2022/7/9 liang fix 初始化完成进行注册,这里会在NioEventLoop的线程进行注册,注册结果通过future进行返回
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
  * The default {@link ChannelPipeline} implementation.  It is usually created
  * by a {@link Channel} implementation when the {@link Channel} is created.
  */
+// 2022/9/25 liang fix ChannelPipeline 的默认实现
 public class DefaultChannelPipeline implements ChannelPipeline {
 
     static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultChannelPipeline.class);
@@ -61,6 +62,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static final AtomicReferenceFieldUpdater<DefaultChannelPipeline, MessageSizeEstimator.Handle> ESTIMATOR =
             AtomicReferenceFieldUpdater.newUpdater(
                     DefaultChannelPipeline.class, MessageSizeEstimator.Handle.class, "estimatorHandle");
+
     final AbstractChannelHandlerContext head;
     final AbstractChannelHandlerContext tail;
 
@@ -90,11 +92,16 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private boolean registered;
 
     protected DefaultChannelPipeline(Channel channel) {
+        // 2022/9/25 liang fix 关联channel
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
+
         succeededFuture = new SucceededChannelFuture(channel, null);
+
         voidPromise =  new VoidChannelPromise(channel, true);
 
+        // 2022/9/25 liang fix 配置tail
         tail = new TailContext(this);
+        // 2022/9/25 liang fix 配置head
         head = new HeadContext(this);
 
         head.next = tail;
@@ -159,8 +166,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             checkMultiplicity(handler);
             name = filterName(name, handler);
 
+            // 2022/9/25 liang fix 构建当前handler的 context
             newCtx = newContext(group, name, handler);
 
+            // 2022/9/25 liang fix 添加到 handler 链中
             addFirst0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
@@ -201,6 +210,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         synchronized (this) {
             checkMultiplicity(handler);
 
+            // 2022/9/25 liang fix 构建一个handlerContext,主要是用于关联 pipeline和handler的关系
             newCtx = newContext(group, filterName(name, handler), handler);
 
             addLast0(newCtx);

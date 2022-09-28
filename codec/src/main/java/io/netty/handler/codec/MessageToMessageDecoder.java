@@ -49,6 +49,7 @@ import java.util.List;
  * {@link ReferenceCounted#release()} on decoded messages.
  *
  */
+// liang fix netty 中的类型转换 一个 object -> 另一个object, 如StringDecoder, ByteBuf 转换为 String
 public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAdapter {
 
     private final TypeParameterMatcher matcher;

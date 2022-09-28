@@ -34,6 +34,7 @@ public class StudyByteBuf {
          *      {@link io.netty.buffer.PooledByteBuf}
          *      {@link io.netty.buffer.ByteBufAllocatorMetricProvider}
          *      {@link io.netty.buffer.SizeClasses}
+         *      {@link io.netty.buffer.PoolArena}
          *
          */
 

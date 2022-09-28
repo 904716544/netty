@@ -78,6 +78,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
+        // 2022/9/25 liang fix NIO中的channel
         this.ch = ch;
         this.readInterestOp = readInterestOp;
         try {
@@ -377,6 +378,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                //liang fix 真正的底层的NIO上的register调用,注意这里注册的 interest 是0, 即到目前为止是不会处理连接事件的
+                //  需要再后续init完成后会更新interest为accept
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {

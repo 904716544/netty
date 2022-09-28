@@ -73,11 +73,13 @@ import static java.lang.Integer.MAX_VALUE;
  * is not released or added to the <tt>out</tt> {@link List}. Use derived buffers like {@link ByteBuf#readSlice(int)}
  * to avoid leaking memory.
  */
+// 2022/9/28 liang fix 注意这里是一个抽象方法,具体的 ByteBuf -> message 的decode这里没有实现
 public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter {
 
     /**
      * Cumulate {@link ByteBuf}s by merge them into one {@link ByteBuf}'s, using memory copies.
      */
+    // liang fix 合并累加器
     public static final Cumulator MERGE_CUMULATOR = new Cumulator() {
         @Override
         public ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in) {
@@ -95,14 +97,17 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     // - cumulation cannot be resized to accommodate the additional data
                     // - cumulation can be expanded with a reallocation operation to accommodate but the buffer is
                     //   assumed to be shared (e.g. refCnt() > 1) and the reallocation may not be safe.
+                    // liang fix 进行扩容
                     return expandCumulation(alloc, cumulation, in);
                 }
+                // 2022/9/28 liang fix 将本次读取到的数据添加到 cumulation 上
                 cumulation.writeBytes(in, in.readerIndex(), required);
                 in.readerIndex(in.writerIndex());
                 return cumulation;
             } finally {
                 // We must release in all cases as otherwise it may produce a leak if writeBytes(...) throw
                 // for whatever release (for example because of OutOfMemoryError)
+                // 2022/9/28 liang fix 对in 进行 release
                 in.release();
             }
         }
@@ -113,6 +118,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      * Be aware that {@link CompositeByteBuf} use a more complex indexing implementation so depending on your use-case
      * and the decoder implementation this may be slower than just use the {@link #MERGE_CUMULATOR}.
      */
+    // liang fix 复合累加器,这里累加器只在 ssl中有使用, 一般解码器中会慢于 copy ????
     public static final Cumulator COMPOSITE_CUMULATOR = new Cumulator() {
         @Override
         public ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in) {
@@ -152,9 +158,13 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
     private static final byte STATE_CALLING_CHILD_DECODE = 1;
     private static final byte STATE_HANDLER_REMOVED_PENDING = 2;
 
+    // 2022/9/28 liang fix 累加缓冲区
     ByteBuf cumulation;
+    // 2022/9/28 liang fix 默认是合并累加器
     private Cumulator cumulator = MERGE_CUMULATOR;
+    // 2022/9/28 liang fix /是否只解码一次
     private boolean singleDecode;
+    // 2022/9/28 liang fix 是否是第一次累加缓冲区
     private boolean first;
 
     /**
@@ -178,6 +188,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
     private int numReads;
 
     protected ByteToMessageDecoder() {
+        // liang fix 必须不能被共享
         ensureNotSharable();
     }
 
@@ -252,6 +263,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
             cumulation = null;
             numReads = 0;
             int readable = buf.readableBytes();
+            // 2022/9/28 liang fix 如果还有数据没有读取完,这里将数据下发到下游
             if (readable > 0) {
                 ctx.fireChannelRead(buf);
                 ctx.fireChannelReadComplete();
@@ -268,15 +280,24 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception { }
 
+    /**
+     * liang fix @date 2022/9/28
+     *      这里是重点,对于Inbound,读取数据必定进入这里
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        // 2022/9/28 liang fix 注意这里只处理ByteBuf类型,其他的数据直接透传到下游
         if (msg instanceof ByteBuf) {
             selfFiredChannelRead = true;
+            // liang fix 从 fastThreadLocal 获取的存储解码后对象的集合,每个线程 默认下16个
             CodecOutputList out = CodecOutputList.newInstance();
             try {
+                // 2022/9/28 liang fix first 判断逻辑是更具 cumulation 来判断,首次肯定是 true
                 first = cumulation == null;
+                // liang fix 注意这里,如果是第一次读取,实际上 cumulation 就是 msg
                 cumulation = cumulator.cumulate(ctx.alloc(),
                         first ? Unpooled.EMPTY_BUFFER : cumulation, (ByteBuf) msg);
+                // liang fix 尝试进行解析到 out 中,由子类实现
                 callDecode(ctx, cumulation, out);
             } catch (DecoderException e) {
                 throw e;
@@ -302,15 +323,17 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                         numReads = 0;
                         discardSomeReadBytes();
                     }
-
+                    // liang fix 解码后的对象数量
                     int size = out.size();
                     firedChannelRead |= out.insertSinceRecycled();
+                    // liang fix 向下传播
                     fireChannelRead(ctx, out, size);
                 } finally {
                     out.recycle();
                 }
             }
         } else {
+            // liang fix 向下传播,不是ByteBuf netty认为已经解码完毕,直接向下传播即可
             ctx.fireChannelRead(msg);
         }
     }
@@ -441,6 +464,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 final int outSize = out.size();
 
                 if (outSize > 0) {
+                    // liang fix 往下游进行发送
                     fireChannelRead(ctx, out, outSize);
                     out.clear();
 
@@ -455,6 +479,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 }
 
                 int oldInputLength = in.readableBytes();
+                // liang fix 进行解码
                 decodeRemovalReentryProtection(ctx, in, out);
 
                 // Check if this handler was removed before continuing the loop.

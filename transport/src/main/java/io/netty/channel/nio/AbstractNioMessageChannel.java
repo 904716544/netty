@@ -69,6 +69,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             final ChannelConfig config = config();
             final ChannelPipeline pipeline = pipeline();
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+            // 2022/9/27 liang fix 进行 allocHandle 的重置
             allocHandle.reset(config);
 
             boolean closed = false;
@@ -76,6 +77,8 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        //liang fix 对于server端,这里返回的只有 1 和0 ,1标识有连接进来,然后保存到readBuf中,注意这里的readBuf就是一个
+                        //  使用 NioSocketChannel 进行封装了的 channel
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;

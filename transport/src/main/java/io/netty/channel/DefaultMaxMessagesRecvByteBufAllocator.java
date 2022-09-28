@@ -117,6 +117,7 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
 
         @Override
         public ByteBuf allocate(ByteBufAllocator alloc) {
+            // 2022/9/27 liang fix 初始化时是2048大小的ByteBUf
             return alloc.ioBuffer(guess());
         }
 

@@ -140,17 +140,26 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             }
             final ChannelPipeline pipeline = pipeline();
             final ByteBufAllocator allocator = config.getAllocator();
+            // 2022/9/27 liang fix AdaptiveRecvByteBufAllocator.HandleImpl 对象
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
+            /**
+             * liang fix @date 2022/9/27 
+             *      {@link  io.netty.channel.AdaptiveRecvByteBufAllocator.HandleImpl#reset(ChannelConfig)}
+             */
             allocHandle.reset(config);
 
             ByteBuf byteBuf = null;
             boolean close = false;
             try {
                 do {
+                    // 2022/9/27 liang fix 使用 allocHandle 进行ByteBuf的创建,默认情况下第一次是 2048 即2KB大小,之后会自适应伸缩
                     byteBuf = allocHandle.allocate(allocator);
+                    // 2022/9/27 liang fix
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
                     if (allocHandle.lastBytesRead() <= 0) {
+                        // 2022/9/27 liang fix 进行到这里,一遍都是disonnect 事件,进行 byteBuf 的release
                         // nothing was read. release the buffer.
+                        // 2022/9/27 liang fix 没有读取到数据,进行byteBuf的释放
                         byteBuf.release();
                         byteBuf = null;
                         close = allocHandle.lastBytesRead() < 0;
@@ -161,12 +170,15 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                         break;
                     }
 
+                    // 2022/9/27 liang fix 记录读取的次数
                     allocHandle.incMessagesRead(1);
                     readPending = false;
+                    // 2022/9/27 liang fix 到这里,NIO中的socket的数据以及被读取到了byteBuf中了
                     pipeline.fireChannelRead(byteBuf);
                     byteBuf = null;
                 } while (allocHandle.continueReading());
 
+                // 2022/9/27 liang fix 读取结束,这里会进行一次当前读取数据的大小进行判断,记录下一次应该申请到的内存的大小
                 allocHandle.readComplete();
                 pipeline.fireChannelReadComplete();
 

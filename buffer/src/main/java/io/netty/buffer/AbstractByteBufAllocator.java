@@ -190,6 +190,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
             return emptyBuf;
         }
         validate(initialCapacity, maxCapacity);
+        // 2022/9/27 liang fix 真正进行内存分配的地方
         return newDirectBuffer(initialCapacity, maxCapacity);
     }
 

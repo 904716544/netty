@@ -76,10 +76,13 @@ public final class ChannelOutboundBuffer {
     // Entry(flushedEntry) --> ... Entry(unflushedEntry) --> ... Entry(tailEntry)
     //
     // The Entry that is the first in the linked-list structure that was flushed
+    // liang fix 即将被消费的开始节点
     private Entry flushedEntry;
     // The Entry which is the first unflushed in the linked-list structure
+    // liang fix 被添加的开始节点,还没有准备好被消费
     private Entry unflushedEntry;
     // The Entry which represents the tail of the buffer
+    // liang fix 最后一个节点
     private Entry tailEntry;
     // The number of flushed entries that are not written yet
     private int flushed;
@@ -112,6 +115,7 @@ public final class ChannelOutboundBuffer {
      * the message was written.
      */
     public void addMessage(Object msg, int size, ChannelPromise promise) {
+        // liang fix 可回收的对象 Entry 封装 msg
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
         if (tailEntry == null) {
             flushedEntry = null;
@@ -146,6 +150,7 @@ public final class ChannelOutboundBuffer {
             }
             do {
                 flushed ++;
+                // liang fix 如果当前是不可写状态,尝试修改为可写状态
                 if (!entry.promise.setUncancellable()) {
                     // Was cancelled so make sure we free up memory and notify about the freed bytes
                     int pending = entry.cancel();
@@ -173,6 +178,7 @@ public final class ChannelOutboundBuffer {
         }
 
         long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, size);
+        // liang fix 如果超过高水位线,设置不可写
         if (newWriteBufferSize > channel.config().getWriteBufferHighWaterMark()) {
             setUnwritable(invokeLater);
         }

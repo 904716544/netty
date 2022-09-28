@@ -582,6 +582,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
                             if (!hasTasks()) {
+                                //liang fix 到这里,就是有了 IO网络事件了,进行一次select
                                 // 当前没有任务，那么就通过 selector 查看有没有 IO 事件
                                 // 并设置超时时间，超时时间到了那么就要执行计划任务了
                                 // 如果 curDeadlineNanos 是 NONE，就没有超时，无限等待。

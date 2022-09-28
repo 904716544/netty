@@ -126,12 +126,14 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
     private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
         if (initMap.add(ctx)) { // Guard against re-entrance.
             try {
+                // 2022/9/23 liang fix 调用自己的initChannel方法,一般用来用户将自定义的channel添加到pipeline上
                 initChannel((C) ctx.channel());
             } catch (Throwable cause) {
                 // Explicitly call exceptionCaught(...) as we removed the handler before calling initChannel(...).
                 // We do so to prevent multiple calls to initChannel(...).
                 exceptionCaught(ctx, cause);
             } finally {
+                // 2022/9/23 liang fix ChannelInitAlizer 类当完成初始化后需要从pipeline上剔除
                 if (!ctx.isRemoved()) {
                     ctx.pipeline().remove(this);
                 }

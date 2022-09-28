@@ -101,6 +101,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private volatile int handlerState = INIT;
 
+    // 2022/9/25 liang fix初始化
     AbstractChannelHandlerContext(DefaultChannelPipeline pipeline, EventExecutor executor,
                                   String name, Class<? extends ChannelHandler> handlerClass) {
         this.name = ObjectUtil.checkNotNull(name, "name");
@@ -149,6 +150,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     static void invokeChannelRegistered(final AbstractChannelHandlerContext next) {
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
+            // 2022/9/25 liang fix 调用对应的 context的 invokeChannelRegistered()方法
             next.invokeChannelRegistered();
         } else {
             executor.execute(new Runnable() {
@@ -1012,6 +1014,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     static final class WriteTask implements Runnable {
+        // 2022/9/25 liang fix 可以看到大量使用 Recycle 来进行对象的创建
         private static final ObjectPool<WriteTask> RECYCLER = ObjectPool.newPool(new ObjectCreator<WriteTask>() {
             @Override
             public WriteTask newObject(Handle<WriteTask> handle) {
