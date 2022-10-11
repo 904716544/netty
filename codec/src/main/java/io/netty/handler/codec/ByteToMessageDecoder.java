@@ -79,10 +79,12 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
     /**
      * Cumulate {@link ByteBuf}s by merge them into one {@link ByteBuf}'s, using memory copies.
      */
-    // liang fix 合并累加器
+    // liang fix 合并累加器,也是默认的累加器
     public static final Cumulator MERGE_CUMULATOR = new Cumulator() {
         @Override
         public ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in) {
+            //liang fix in.isContiguous() 是用来判断当前的 ByteBuf 是否是复合的,对于复合的 ByteBuf 这里不进行处理
+            //  cumulation.isReadable() 来判断当前的 cumulation 是否是可读,默认情况下第一次进来的 cumulation 就是一个empty的ByteBuf,此时直接返回 in 即可
             if (!cumulation.isReadable() && in.isContiguous()) {
                 // If cumulation is empty and input buffer is contiguous, use it directly
                 cumulation.release();
@@ -90,6 +92,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
             }
             try {
                 final int required = in.readableBytes();
+                // 2022/9/28 liang fix 判断是否需要进行扩容
                 if (required > cumulation.maxWritableBytes() ||
                     required > cumulation.maxFastWritableBytes() && cumulation.refCnt() > 1 ||
                     cumulation.isReadOnly()) {
@@ -100,7 +103,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     // liang fix 进行扩容
                     return expandCumulation(alloc, cumulation, in);
                 }
-                // 2022/9/28 liang fix 将本次读取到的数据添加到 cumulation 上
+                // 2022/9/28 liang fix 将本次读取到的数据添加到 cumulation 上,走到这里说明已经存在上次读取时未处理完的数据了
                 cumulation.writeBytes(in, in.readerIndex(), required);
                 in.readerIndex(in.writerIndex());
                 return cumulation;
@@ -318,9 +321,11 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                         }
                         cumulation = null;
                     } else if (++numReads >= discardAfterReads) {
+                        // 2022/9/28 liang fix 进入这里说明 cumulation 里还有读书没有被处理
                         // We did enough reads already try to discard some bytes, so we not risk to see a OOME.
                         // See https://github.com/netty/netty/issues/4275
                         numReads = 0;
+                        // 2022/9/28 liang fix 把未读的数据copy前移copy到已读的区域，从而discard读区域进而扩大写区域
                         discardSomeReadBytes();
                     }
                     // liang fix 解码后的对象数量
