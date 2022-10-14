@@ -428,6 +428,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      */
     protected abstract class AbstractUnsafe implements Unsafe {
 
+        // 2022/10/14 liang fix unsafe 封装的outboundBuffer
         private volatile ChannelOutboundBuffer outboundBuffer = new ChannelOutboundBuffer(AbstractChannel.this);
         private RecvByteBufAllocator.Handle recvHandle;
         private boolean inFlush0;
@@ -868,7 +869,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             int size;
             try {
+                //liang fix 在使用到的NioSocketChannel下,这里只能是ByteBuf,否则就会抛出异常
+                // 并且这里只支持 DirectBuffer, 如果是heap,会进行一次转换
                 msg = filterOutboundMessage(msg);
+                // 2022/10/15 liang fix 计算本次msg的size,如果是 headContext, 这里就是ByteBuf,实际上就是计算ByteBuf上可read的大小
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {
                     size = 0;
@@ -881,7 +885,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 }
                 return;
             }
-
+            // 2022/10/15 liang fix 添加到 outboundBuffer上
             outboundBuffer.addMessage(msg, size, promise);
         }
 

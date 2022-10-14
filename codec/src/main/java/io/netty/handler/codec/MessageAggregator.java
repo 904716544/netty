@@ -49,6 +49,7 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  * @param <C> the type of the content message (must be a subtype of {@link ByteBufHolder})
  * @param <O> the type of the aggregated message (must be a subtype of {@code S} and {@link ByteBufHolder})
  */
+
 public abstract class MessageAggregator<I, S, C extends ByteBufHolder, O extends ByteBufHolder>
         extends MessageToMessageDecoder<I> {
 

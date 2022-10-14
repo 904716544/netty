@@ -199,6 +199,7 @@ public final class ChannelOutboundBuffer {
 
         long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, -size);
         if (notifyWritability && newWriteBufferSize < channel.config().getWriteBufferLowWaterMark()) {
+            // 2022/10/14 liang fix 设置可写
             setWritable(invokeLater);
         }
     }
@@ -604,6 +605,7 @@ public final class ChannelOutboundBuffer {
         }
     }
 
+    // 2022/10/14 liang fix 设置不可写,同时如果原来是可写,那么需要触发一下 fireChannelWritabilityChanged ()方法,发送状态变更通知
     private void setUnwritable(boolean invokeLater) {
         for (;;) {
             final int oldValue = unwritable;
@@ -811,15 +813,15 @@ public final class ChannelOutboundBuffer {
             }
         });
 
-        private final Handle<Entry> handle;
+        private final Handle<Entry> handle; //池化操作的处理器
         Entry next;
         Object msg;
         ByteBuffer[] bufs;
         ByteBuffer buf;
         ChannelPromise promise;
-        long progress;
-        long total;
-        int pendingSize;
+        long progress; //当前进度，即已经传了多少数据
+        long total; //总共的数据大小
+        int pendingSize; //待冲刷的评估大小，要加上96
         int count = -1;
         boolean cancelled;
 
@@ -830,7 +832,7 @@ public final class ChannelOutboundBuffer {
         static Entry newInstance(Object msg, int size, long total, ChannelPromise promise) {
             Entry entry = RECYCLER.get();
             entry.msg = msg;
-            entry.pendingSize = size + CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD;
+            entry.pendingSize = size + CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD; //评估的大小
             entry.total = total;
             entry.promise = promise;
             return entry;

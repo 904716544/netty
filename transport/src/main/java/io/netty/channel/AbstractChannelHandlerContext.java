@@ -15,7 +15,9 @@
  */
 package io.netty.channel;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufHolder;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
@@ -773,6 +775,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void write(Object msg, boolean flush, ChannelPromise promise) {
         ObjectUtil.checkNotNull(msg, "msg");
         try {
+            // 2022/10/14 liang fix 必须是合法的promise
             if (isNotValidPromise(promise, true)) {
                 ReferenceCountUtil.release(msg);
                 // cancelled
@@ -783,8 +786,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             throw e;
         }
 
+        // 2022/10/14 liang fix
         final AbstractChannelHandlerContext next = findContextOutbound(flush ?
                 (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
+        //liang fix 默认情况下这里还是返回的msg字段,除非用户自定一个 ReferenceCounted 的对象并且重写 touch()方法
+        //  在netty 内部的 Bytbuf 实现 PooledUnsafeDirectByteBuf 这方法是直接返回自身,相当于什么都没做
+        // 2022/10/15 liang fix 用于检查内存泄露
         final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
@@ -794,6 +801,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
                 next.invokeWrite(m, promise);
             }
         } else {
+            // 2022/10/14 liang fix 在非eventLoop线程中,会将当前的 msg封装为一个 WriteTask ,添加到 taskQueue 上异步执行
             final WriteTask task = WriteTask.newInstance(next, m, promise, flush);
             if (!safeExecute(executor, task, promise, m, !flush)) {
                 // We failed to submit the WriteTask. We need to cancel it so we decrement the pending bytes
@@ -1024,7 +1032,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
         static WriteTask newInstance(AbstractChannelHandlerContext ctx,
                 Object msg, ChannelPromise promise, boolean flush) {
+            // 2022/10/14 liang fix 直接对象池回去
             WriteTask task = RECYCLER.get();
+            // 2022/10/14 liang fix 初始化
             init(task, ctx, msg, promise, flush);
             return task;
         }
@@ -1037,9 +1047,12 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
                 SystemPropertyUtil.getInt("io.netty.transport.writeTaskSizeOverhead", 32);
 
         private final Handle<WriteTask> handle;
+        // 2022/10/14 liang fix tailContext 反向找到的第一个 outboundContext
         private AbstractChannelHandlerContext ctx;
         private Object msg;
+        // 2022/10/14 liang fix 回调promise
         private ChannelPromise promise;
+        // 2022/10/14 liang fix 当前
         private int size; // sign bit controls flush
 
         @SuppressWarnings("unchecked")
@@ -1047,6 +1060,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             this.handle = (Handle<WriteTask>) handle;
         }
 
+        // 2022/10/14 liang fix 每次的写事件都会在添加到eventloop之前进行一次初始化,因为这个对象是在对象池中的
         protected static void init(WriteTask task, AbstractChannelHandlerContext ctx,
                                    Object msg, ChannelPromise promise, boolean flush) {
             task.ctx = ctx;
@@ -1054,7 +1068,15 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             task.promise = promise;
 
             if (ESTIMATE_TASK_SIZE_ON_SUBMIT) {
+                /**
+                 * liang fix @date 2022/10/14
+                 *      这里计算的size不一定是准备的, 实际上的 estimatorHandle 是 {@link DefaultMessageSizeEstimator.HandleImpl}
+                 *      这里计算的size只针对 {@link ByteBuf} , {@link ByteBufHolder} , {@link FileRegion},
+                 *      其他默认情况下都是返回 8 , WRITE_TASK_OVERHEAD 为当前 write_task 本身的大小 : 32 ->  12 bytes obj header, 4 ref fields and one int field
+                 */
                 task.size = ctx.pipeline.estimatorHandle().size(msg) + WRITE_TASK_OVERHEAD;
+
+                // 2022/10/14 liang fix 主要用来进行计算当前的task.size是否 > highWaterMark, 如果超过,设置不可写
                 ctx.pipeline.incrementPendingOutboundBytes(task.size);
             } else {
                 task.size = 0;
@@ -1067,6 +1089,8 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         @Override
         public void run() {
             try {
+                // liang fix,这里在处理时,先减去本次task的msg的大小,如果当前eventLoop是一级到达highWaterMark了,如果本次以及<lowWaterMark,
+                //  就会设置可写
                 decrementPendingOutboundBytes();
                 if (size >= 0) {
                     ctx.invokeWrite(msg, promise);

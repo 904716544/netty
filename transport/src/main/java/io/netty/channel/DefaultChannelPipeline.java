@@ -1027,6 +1027,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+        // 2022/10/14 liang fix 写事件调用会到tail这里
         return tail.writeAndFlush(msg, promise);
     }
 
@@ -1237,6 +1238,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @UnstableApi
     protected void incrementPendingOutboundBytes(long size) {
+        // 2022/10/14 liang fix 获取输出的 buffer,一般不会是空
         ChannelOutboundBuffer buffer = channel.unsafe().outboundBuffer();
         if (buffer != null) {
             buffer.incrementPendingOutboundBytes(size);

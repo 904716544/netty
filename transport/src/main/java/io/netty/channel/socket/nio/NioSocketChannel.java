@@ -376,9 +376,11 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         // make a best effort to adjust as OS behavior changes.
         if (attempted == written) {
             if (attempted << 1 > oldMaxBytesPerGatheringWrite) {
+                // 2022/10/15 liang fix 缩小
                 ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted << 1);
             }
         } else if (attempted > MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD && written < attempted >>> 1) {
+            // 2022/10/15 liang fix 扩容
             ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted >>> 1);
         }
     }
@@ -386,18 +388,23 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();
+        //liang fix 最大写入次数 默认为16 目的是为了保证SubReactor可以平均的处理注册其上的所有Channel, 防止 reactor 线程一直在一个 channel 上执行 IO 操作
         int writeSpinCount = config().getWriteSpinCount();
         do {
             if (in.isEmpty()) {
                 // All written so clear OP_WRITE
+                //liang fix 如果全部数据已经写完 则移除OP_WRITE事件并直接退出writeLoop
                 clearOpWrite();
                 // Directly return here so incompleteWrite(...) is not called.
                 return;
             }
 
             // Ensure the pending writes are made of ByteBufs only.
+            // 2022/10/15 liang fix 获取最大写入字节大小,这里是动态变化的,默认情况下是 262144
             int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+            // 2022/10/15 liang fix 转换为 java中 ButeBuffer
             ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+            // 2022/10/15 liang fix 本次需要写出的 NioBufferCnt的数量,最多 1024 个
             int nioBufferCnt = in.nioBufferCount();
 
             // Always use nioBuffers() to workaround data-corruption.
@@ -405,6 +412,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
             switch (nioBufferCnt) {
                 case 0:
                     // We have something else beside ByteBuffers to write so fallback to normal writes.
+                    // 2022/10/15 liang fix 记录 writeSpinCount 次数,默认情况下会尝试16次,之后抛出异常
                     writeSpinCount -= doWrite0(in);
                     break;
                 case 1: {
@@ -415,10 +423,13 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     int attemptedBytes = buffer.remaining();
                     final int localWrittenBytes = ch.write(buffer);
                     if (localWrittenBytes <= 0) {
+                        // 2022/10/15 liang fix 写失败,注册一个write事件,需要继续write
                         incompleteWrite(true);
                         return;
                     }
+                    // 2022/10/15 liang fix 这里进行 maxBytesPerGatheringWrite 的调整,主要是进行伸缩
                     adjustMaxBytesPerGatheringWrite(attemptedBytes, localWrittenBytes, maxBytesPerGatheringWrite);
+                    // 2022/10/15 liang fix 去除本次写出的数据,这里的去处是针对的 netty中的 outboundBuffer
                     in.removeBytes(localWrittenBytes);
                     --writeSpinCount;
                     break;
@@ -428,8 +439,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // to check if the total size of all the buffers is non-zero.
                     // We limit the max amount to int above so cast is safe
                     long attemptedBytes = in.nioBufferSize();
+                    // 2022/10/15 liang fix 直接调用数组的写出方法
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
                     if (localWrittenBytes <= 0) {
+                        // 2022/10/15 liang fix 写失败,注册一个write事件,需要继续write
                         incompleteWrite(true);
                         return;
                     }
