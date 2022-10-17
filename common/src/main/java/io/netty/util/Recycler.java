@@ -103,9 +103,17 @@ public abstract class Recycler<T> {
     private final FastThreadLocal<LocalPool<T>> threadLocal = new FastThreadLocal<LocalPool<T>>() {
         @Override
         protected LocalPool<T> initialValue() {
+            // 2022/10/18 liang fix 构建一个LocolPool,
+            /**
+             * liang fix @date 2022/10/18
+             *      maxCapacityPerThread 最大容量 4096
+             *      interval 回收阈值 8 , 每间隔 8 回收一个对象
+             *      chunkSize MPSC中每个chunk的大小 默认32
+             */
             return new LocalPool<T>(maxCapacityPerThread, interval, chunkSize);
         }
 
+        // 2022/10/18 liang fix 线程执行完需要对对象池进行 clear
         @Override
         protected void onRemoval(LocalPool<T> value) throws Exception {
             super.onRemoval(value);
@@ -172,18 +180,30 @@ public abstract class Recycler<T> {
         if (maxCapacityPerThread == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }
+
+        // 2022/10/18 liang fix 新的对象池技术,使用LocalPool替代了 WeakOrderQueue
         LocalPool<T> localPool = threadLocal.get();
+
+        // 2022/10/18 liang fix 尝试从 MPSC 队列获取一个 claim 状态的 handle,有可能返回null
         DefaultHandle<T> handle = localPool.claim();
+
         T obj;
+        // 2022/10/18 liang fix 没有获取到handle,说明没有可复用的对象
         if (handle == null) {
+            //liang fix 构建一个handle,这里会使用到 ratioInterval(默认是8), 用来标识当前对象是否需要回收
+            //  如果需要回收,那么handle 就是 DefaultHandle 对象
             handle = localPool.newHandle();
             if (handle != null) {
+                // 2022/10/17 liang fix 创建对象,注意创建的对象里必须有一一个handle, 这个handle在回收时有用
                 obj = newObject(handle);
+                // 2022/10/18 liang fix 互相引用
                 handle.set(obj);
             } else {
+                // 2022/10/18 liang fix 不需要回收的对象
                 obj = newObject((Handle<T>) NOOP_HANDLE);
             }
         } else {
+            // 2022/10/18 liang fix 有可复用的对象
             obj = handle.get();
         }
 
@@ -213,8 +233,11 @@ public abstract class Recycler<T> {
     public interface Handle<T> extends ObjectPool.Handle<T>  { }
 
     private static final class DefaultHandle<T> implements Handle<T> {
+        // 2022/10/18 liang fix 清理结束,默认初始化的状态
         private static final int STATE_CLAIMED = 0;
+        // 2022/10/18 liang fix 可用状态,当添加到缓存中的状态
         private static final int STATE_AVAILABLE = 1;
+
         private static final AtomicIntegerFieldUpdater<DefaultHandle<?>> STATE_UPDATER;
         static {
             AtomicIntegerFieldUpdater<?> updater = AtomicIntegerFieldUpdater.newUpdater(DefaultHandle.class, "state");
@@ -223,6 +246,7 @@ public abstract class Recycler<T> {
         }
 
         @SuppressWarnings({"FieldMayBeFinal", "unused"}) // Updated by STATE_UPDATER.
+        // 2022/10/18 liang fix 当前handle的状态,默认为0
         private volatile int state; // State is initialised to STATE_CLAIMED (aka. 0) so they can be released.
         private final LocalPool<T> localPool;
         private T value;
@@ -251,6 +275,7 @@ public abstract class Recycler<T> {
             if (state != STATE_AVAILABLE) {
                 return false;
             }
+            // 2022/10/18 liang fix 修改状态
             return STATE_UPDATER.compareAndSet(this, STATE_AVAILABLE, STATE_CLAIMED);
         }
 
@@ -262,9 +287,13 @@ public abstract class Recycler<T> {
         }
     }
 
+    // 2022/10/18 liang fix 重写的线程池实现,不在依赖 WeakOrderQueue 的弱引用实现
     private static final class LocalPool<T> {
+        // 2022/10/18 liang fix 阈值, 用来限制对象的回收(不是每次都进行对象的回收) 默认 8
         private final int ratioInterval;
         private volatile MessagePassingQueue<DefaultHandle<T>> pooledHandles;
+
+        // 2022/10/18 liang fix 阈值计数器
         private int ratioCounter;
 
         @SuppressWarnings("unchecked")
@@ -273,6 +302,7 @@ public abstract class Recycler<T> {
             if (BLOCKING_POOL) {
                 pooledHandles = new BlockingMessageQueue<DefaultHandle<T>>(maxCapacity);
             } else {
+                // 2022/10/18 liang fix 默认是 MPSC 的一个queue
                 pooledHandles = (MessagePassingQueue<DefaultHandle<T>>) newMpscQueue(chunkSize, maxCapacity);
             }
             ratioCounter = ratioInterval; // Start at interval so the first one will be recycled.
@@ -284,9 +314,13 @@ public abstract class Recycler<T> {
                 return null;
             }
             DefaultHandle<T> handle;
+            // 2022/10/18 liang fix 这里会循环找到一个可用的handle(同时需要修改这个状态为可用,如果修改失败说明以及被其他线程修改,需要重新获取handle)或者返回null
             do {
+                // 2022/10/18 liang fix 这里使用的是 relaxedPoll() 方法,这个方法的意思是如果有 生产者正在填充但元素尚不可见,这种情况也会返回null
                 handle = handles.relaxedPoll();
             } while (handle != null && !handle.availableToClaim());
+
+            // 2022/10/18 liang fix null 或者一个可用的handle
             return handle;
         }
 
@@ -294,6 +328,7 @@ public abstract class Recycler<T> {
             MessagePassingQueue<DefaultHandle<T>> handles = pooledHandles;
             handle.toAvailable();
             if (handles != null) {
+                // 2022/10/18 liang fix 添加任务到 handles 队列中
                 handles.relaxedOffer(handle);
             }
         }

@@ -210,14 +210,18 @@ final class PoolChunk<T> implements PoolChunkMetric {
         this.arena = arena;
         this.base = base;
         this.memory = memory;
+        // 2022/10/16 liang fix pageSize 默认 8KB
         this.pageSize = pageSize;
+        // 2022/10/16 liang fix pageShifts pageSize需要左移多少位,默认13 2^13 = 8KB
         this.pageShifts = pageShifts; // 13 -> 8kb
         this.chunkSize = chunkSize; // 4MB
         freeBytes = chunkSize;
 
+        // 2022/10/16 liang fix 分配的runs 规格,这里是以pageSize来分配,一共 32种
         runsAvail = newRunsAvailqueueArray(maxPageIdx);
         runsAvailLock = new ReentrantLock();
         runsAvailMap = new LongLongHashMap(-1);
+        // 2022/10/16 liang fix 管理所有可能的subpage, 4MB 按照 8KB划分, 一共有 512个page
         subpages = new PoolSubpage[chunkSize >> pageShifts];
 
         //insert initial run, offset = 0, pages = chunkSize / pageSize
@@ -225,7 +229,8 @@ final class PoolChunk<T> implements PoolChunkMetric {
         //liang fix 初始化 initHandle,在 handle中标识 pageSize 的位置15 bit,这里左移动 34位
         //  oooooooo ooooooos ssssssss ssssssue bbbbbbbb bbbbbbbb bbbbbbbb bbbbbbbb, 其中的 s就是 pageSize的使用情况
         //  00000000 00000000 00001000 00000000 00000000 00000000 00000000 00000000
-        //  1000 00000 就是 512
+        //  1000 00000 就是 512,初始化后就是一共有 512 个page 可用
+        //  34位 = 1位的 isused 标识 + 1位的 isSubpage标识 + 32位的 subpage (一共page有32种规格)
         long initHandle = (long) pages << SIZE_SHIFT;
         // 2022/8/21 liang fix 填充可用的
         insertAvailRun(0, pages, initHandle);
@@ -538,9 +543,10 @@ final class PoolChunk<T> implements PoolChunkMetric {
      */
 
     /**
+     *liang fix
      * 创建/初始化一个新的「PoolSubpage」对象。
      * 任何新创建的「PoolSubpage」对象都会被添加到相应的subpagePool中
-     *先对sizeIdx这个索引在sizeClasses中所对应的size为基础的elemSize获取一个这个elemSize和pageSize的最小公倍数大小的内存，
+     * 先对sizeIdx这个索引在sizeClasses中所对应的size为基础的elemSize获取一个这个elemSize和pageSize的最小公倍数大小的内存，
      * 将这块内存分为大小相等的以elmSize的subPage利用PoolSubPage来进行维护。
      * @param sizeIdx  对应{@link SizeClasses} 索引值
      * @return         句柄值

@@ -54,6 +54,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
 
     void init(PoolChunk<T> chunk, ByteBuffer nioBuffer,
               long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
+        System.out.println("lenth is " + length + " tubei handle is  " + handle);
         init0(chunk, nioBuffer, handle, offset, length, maxLength, cache);
     }
 
