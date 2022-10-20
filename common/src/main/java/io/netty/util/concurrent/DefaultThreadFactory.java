@@ -102,6 +102,9 @@ public class DefaultThreadFactory implements ThreadFactory {
 
     @Override
     public Thread newThread(Runnable r) {
+        //liang fix 将 runnable 封装为 FastThreadLocalRunnable
+        //  FastThreadLocalRunnable 包装了普通的 runable 接口,多了一步 FastThreadLocal.removeAll() 的操作
+        //  包装了内存的安全性
         Thread t = newThread(FastThreadLocalRunnable.wrap(r), prefix + nextId.incrementAndGet());
         try {
             if (t.isDaemon() != daemon) {

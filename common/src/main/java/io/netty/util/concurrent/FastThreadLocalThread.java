@@ -28,8 +28,10 @@ public class FastThreadLocalThread extends Thread {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(FastThreadLocalThread.class);
 
     // This will be set to true if we have a chance to wrap the Runnable.
+    // 2022/10/21 liang fix 暂时未使用到 ?
     private final boolean cleanupFastThreadLocals;
 
+    // 2022/10/21 liang fix 用来进行 fastThreadLocal 存储的map,底层实际上是使用的数组实现
     private InternalThreadLocalMap threadLocalMap;
 
     public FastThreadLocalThread() {

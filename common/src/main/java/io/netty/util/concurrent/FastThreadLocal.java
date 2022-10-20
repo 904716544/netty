@@ -43,6 +43,8 @@ import java.util.Set;
  */
 public class FastThreadLocal<V> {
 
+    //liang fix 这里用了 static 定义,因此只会在类加载是调用,返回的值为 0, 用来存储需要删除的FastThreadLocal
+    //  实际就是保存在InternalThreadLocalMap数组的0位置 ,添加这个目的是为了在线程关闭时,快速remove ??
     private static final int variablesToRemoveIndex = InternalThreadLocalMap.nextVariableIndex();
 
     /**
@@ -96,15 +98,18 @@ public class FastThreadLocal<V> {
 
     @SuppressWarnings("unchecked")
     private static void addToVariablesToRemove(InternalThreadLocalMap threadLocalMap, FastThreadLocal<?> variable) {
+        // 2022/10/21 liang fix 0位置上存储的是需要回收的对象,底层数据结构是Set
         Object v = threadLocalMap.indexedVariable(variablesToRemoveIndex);
         Set<FastThreadLocal<?>> variablesToRemove;
         if (v == InternalThreadLocalMap.UNSET || v == null) {
+            // 2022/10/21 liang fix ???
             variablesToRemove = Collections.newSetFromMap(new IdentityHashMap<FastThreadLocal<?>, Boolean>());
+
             threadLocalMap.setIndexedVariable(variablesToRemoveIndex, variablesToRemove);
         } else {
             variablesToRemove = (Set<FastThreadLocal<?>>) v;
         }
-
+        // 2022/10/21 liang fix 将创建的对象也添加到这个set中
         variablesToRemove.add(variable);
     }
 
@@ -122,6 +127,7 @@ public class FastThreadLocal<V> {
         variablesToRemove.remove(variable);
     }
 
+    // 2022/10/21 liang fix 当前 threadLocal 的标识
     private final int index;
 
     public FastThreadLocal() {
@@ -133,12 +139,16 @@ public class FastThreadLocal<V> {
      */
     @SuppressWarnings("unchecked")
     public final V get() {
+        // 2022/10/21 liang fix 返回当前线程对应的 InternalThreadLocalMap,来源有两个注意
         InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+        // 2022/10/21 liang fix index 是当前 FastThreadLocal 创建时就有的 index, 这里返回的v 如果之前set过值那么返回的就是那个值,否则返回的是默认值 UNSET
         Object v = threadLocalMap.indexedVariable(index);
+        // 2022/10/21 liang fix 不是默认值,返回用户设置的 value
         if (v != InternalThreadLocalMap.UNSET) {
             return (V) v;
         }
 
+        // 2022/10/21 liang fix 进行initValue, 这里如果用户没有重写这个方法,那么返回的就是null
         return initialize(threadLocalMap);
     }
 
@@ -179,6 +189,7 @@ public class FastThreadLocal<V> {
             PlatformDependent.throwException(e);
         }
 
+        // 2022/10/21 liang fix 默认值保存到 threadLocalMap上
         threadLocalMap.setIndexedVariable(index, v);
         addToVariablesToRemove(threadLocalMap, this);
         return v;
@@ -189,7 +200,9 @@ public class FastThreadLocal<V> {
      */
     public final void set(V value) {
         if (value != InternalThreadLocalMap.UNSET) {
+            // 2022/10/21 liang fix 先获取 FastThreadLocal 的存储容器 threadLocalMap,threadLocalMap来源有两个
             InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+            // 2022/10/21 liang fix 进行赋值
             setKnownNotUnset(threadLocalMap, value);
         } else {
             remove();
@@ -211,7 +224,9 @@ public class FastThreadLocal<V> {
      * @see InternalThreadLocalMap#setIndexedVariable(int, Object).
      */
     private void setKnownNotUnset(InternalThreadLocalMap threadLocalMap, V value) {
+        // 2022/10/21 liang fix 将 value 填充到 index上,threadLocalMap 内的数组默认是 32,这里因此有可能会涉及到扩容
         if (threadLocalMap.setIndexedVariable(index, value)) {
+            // 2022/10/21 liang fix
             addToVariablesToRemove(threadLocalMap, this);
         }
     }
@@ -248,12 +263,14 @@ public class FastThreadLocal<V> {
         if (threadLocalMap == null) {
             return;
         }
-
+        // 2022/10/21 liang fix 直接移除当前 FastThreadLocal 对应的index 的值
         Object v = threadLocalMap.removeIndexedVariable(index);
+        // 2022/10/21 liang fix 同时从 set 集合中移除
         removeFromVariablesToRemove(threadLocalMap, this);
 
         if (v != InternalThreadLocalMap.UNSET) {
             try {
+                // 2022/10/21 liang fix 调用 onRemoval()方法
                 onRemoval((V) v);
             } catch (Exception e) {
                 PlatformDependent.throwException(e);
@@ -264,6 +281,7 @@ public class FastThreadLocal<V> {
     /**
      * Returns the initial value for this thread-local variable.
      */
+    // 2022/10/21 liang fix 初始化值的方法,默认返回null, 可用户自定义实现
     protected V initialValue() throws Exception {
         return null;
     }

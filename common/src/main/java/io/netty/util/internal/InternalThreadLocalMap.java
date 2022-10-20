@@ -40,12 +40,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(InternalThreadLocalMap.class);
+
+    // 2022/10/21 liang fix 就是普通的thread对象,当使用了 FastThreadLocal 但是没有使用 FastThread 时使用
     private static final ThreadLocal<InternalThreadLocalMap> slowThreadLocalMap =
             new ThreadLocal<InternalThreadLocalMap>();
+
+    // 2022/10/21 liang fix 全局唯一标识
     private static final AtomicInteger nextIndex = new AtomicInteger();
 
     private static final int DEFAULT_ARRAY_LIST_INITIAL_CAPACITY = 8;
     private static final int ARRAY_LIST_CAPACITY_EXPAND_THRESHOLD = 1 << 30;
+
     // Reference: https://hg.openjdk.java.net/jdk8/jdk8/jdk/file/tip/src/share/classes/java/util/ArrayList.java#l229
     private static final int ARRAY_LIST_CAPACITY_MAX_SIZE = Integer.MAX_VALUE - 8;
     private static final int STRING_BUILDER_INITIAL_SIZE;
@@ -53,6 +58,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     private static final int HANDLER_SHARABLE_CACHE_INITIAL_CAPACITY = 4;
     private static final int INDEXED_VARIABLE_TABLE_INITIAL_SIZE = 32;
 
+    // 2022/10/21 liang fix 数组的默认填充
     public static final Object UNSET = new Object();
 
     /** Used by {@link FastThreadLocal} */
@@ -97,18 +103,29 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         return slowThreadLocalMap.get();
     }
 
+    /**
+     * liang fix @date 2022/10/21
+     *      这里会返回一个 InternalThreadLocalMap,这个对象来源有2个地方
+     *          1. FastThread 线程, 直接创建对象和线程绑定
+     *          2. 普通线程, 将 InternalThreadLocalMap 创建后和线程的ThreadLocal 绑定再进行返回
+     */
     public static InternalThreadLocalMap get() {
         Thread thread = Thread.currentThread();
+        // 2022/10/21 liang fix 这里是兼容了普通的Thread,
         if (thread instanceof FastThreadLocalThread) {
             return fastGet((FastThreadLocalThread) thread);
         } else {
+            //liang fix 当使用到FastThreadLocal对象时,如果线程不是FastThread,那么就会走这里
+            //  这里的实现比较简单,就是创建一个 ThreadLocal 对象, 存储 InternalThreadLocalMap
             return slowGet();
         }
     }
 
     private static InternalThreadLocalMap fastGet(FastThreadLocalThread thread) {
+        // 2022/10/21 liang fix 返回当前线程的 threadLocalMap
         InternalThreadLocalMap threadLocalMap = thread.threadLocalMap();
         if (threadLocalMap == null) {
+            //2019-12-08 liang fix 创建一个  InternalThreadLocalMap 对象返回
             thread.setThreadLocalMap(threadLocalMap = new InternalThreadLocalMap());
         }
         return threadLocalMap;
@@ -150,6 +167,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     }
 
     private InternalThreadLocalMap() {
+        // 2022/10/21 liang fix ThreadLocalMap 进行初始化,这里是填充一个 UNSET 的数组返回,数组大小默认 32
         indexedVariables = newIndexedVariableTable();
     }
 
@@ -312,7 +330,9 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     }
 
     public Object indexedVariable(int index) {
+        // 2022/10/21 liang fix 加这个是为了防止扩容?
         Object[] lookup = indexedVariables;
+        // 2022/10/21 liang fix 如果有值就返回,否则返回 UNSET
         return index < lookup.length? lookup[index] : UNSET;
     }
 
@@ -321,11 +341,13 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
      */
     public boolean setIndexedVariable(int index, Object value) {
         Object[] lookup = indexedVariables;
+        // 2022/10/21 liang fix 数组未溢出,直接赋值即可
         if (index < lookup.length) {
             Object oldValue = lookup[index];
             lookup[index] = value;
             return oldValue == UNSET;
         } else {
+            // 2022/10/21 liang fix 扩容 & 赋值
             expandIndexedVariableTableAndSet(index, value);
             return true;
         }
@@ -335,7 +357,9 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         Object[] oldArray = indexedVariables;
         final int oldCapacity = oldArray.length;
         int newCapacity;
+
         if (index < ARRAY_LIST_CAPACITY_EXPAND_THRESHOLD) {
+        // 2022/10/21 liang fix 这种情况下,这里是进行向上取整为2的倍数
             newCapacity = index;
             newCapacity |= newCapacity >>>  1;
             newCapacity |= newCapacity >>>  2;
@@ -347,9 +371,11 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
             newCapacity = ARRAY_LIST_CAPACITY_MAX_SIZE;
         }
 
+        // 2022/10/21 liang fix 数组 copy
         Object[] newArray = Arrays.copyOf(oldArray, newCapacity);
         Arrays.fill(newArray, oldCapacity, newArray.length, UNSET);
         newArray[index] = value;
+        // 2022/10/21 liang fix 替换原来的数组
         indexedVariables = newArray;
     }
 

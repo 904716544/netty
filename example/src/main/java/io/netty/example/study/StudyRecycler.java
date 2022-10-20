@@ -12,6 +12,9 @@ public class StudyRecycler {
      *  {@link MpscChunkedArrayQueue#relaxedPoll()}
      *  {@link MpscChunkedArrayQueue#poll()}
      *  {@link io.netty.buffer.PooledUnsafeDirectByteBuf#recycle()}
+     *
+     *  {@link java.nio.MappedByteBuffer}
+     *  {@link java.nio.HeapByteBuffer}
      */
 
 

@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Default implementation which uses simple round-robin to choose next {@link EventExecutor}.
  */
+//liang fix EventExecutor 选择器, 实际上就是用来选择具体的EventExecutor 来执行task,每个EventExecutor 就是一个线程,
+//  可以认为这里是用来进行选择将任务提交给那个线程的
 @UnstableApi
 public final class DefaultEventExecutorChooserFactory implements EventExecutorChooserFactory {
 
