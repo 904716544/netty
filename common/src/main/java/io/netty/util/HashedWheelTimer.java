@@ -87,17 +87,29 @@ public class HashedWheelTimer implements Timer {
     static final InternalLogger logger =
             InternalLoggerFactory.getInstance(HashedWheelTimer.class);
 
+    // 2022/10/21 liang fix 限制一个JVM 中的 HashedWheelTimer 实例数,最多只能 INSTANCE_COUNT_LIMIT 个
     private static final AtomicInteger INSTANCE_COUNTER = new AtomicInteger();
+
+    //liang fix 限制错误日志输出的标识,也就是说如果创建的HashedWheelTimer 大大超过了 INSTANCE_COUNT_LIMIT,
+    //  也只会调用一次 reportTooManyInstances (log.error 错误日志)
     private static final AtomicBoolean WARNED_TOO_MANY_INSTANCES = new AtomicBoolean();
+
+    // 2022/10/21 liang fix HashedWheelTimer 的限制个数
     private static final int INSTANCE_COUNT_LIMIT = 64;
+
+    // 2022/10/21 liang fix 时间轮的时间最小粒度 nanos
     private static final long MILLISECOND_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
+
+    // 2022/10/21 liang fix 内存泄露检测机制
     private static final ResourceLeakDetector<HashedWheelTimer> leakDetector = ResourceLeakDetectorFactory.instance()
             .newResourceLeakDetector(HashedWheelTimer.class, 1);
 
     private static final AtomicIntegerFieldUpdater<HashedWheelTimer> WORKER_STATE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(HashedWheelTimer.class, "workerState");
 
+    // 2022/10/21 liang fix 是否进行内存泄露检测,默认为true
     private final ResourceLeakTracker<HashedWheelTimer> leak;
+    // 2022/10/21 liang fix 封装的 Runable, 也就是时间轮执行的代码块所在地
     private final Worker worker = new Worker();
     private final Thread workerThread;
 
@@ -107,11 +119,17 @@ public class HashedWheelTimer implements Timer {
     @SuppressWarnings({"unused", "FieldMayBeFinal"})
     private volatile int workerState; // 0 - init, 1 - started, 2 - shut down
 
+    // 2022/10/21 liang fix 每次 tick 间隔, 相当于时针间隔多久走到下一个 slot
     private final long tickDuration;
+
+    // 2022/10/21 liang fix 时间轮数组,默认 512 个
     private final HashedWheelBucket[] wheel;
+
     private final int mask;
     private final CountDownLatch startTimeInitialized = new CountDownLatch(1);
+    // 2022/10/21 liang fix 使用的是 MPSC 队列
     private final Queue<HashedWheelTimeout> timeouts = PlatformDependent.newMpscQueue();
+    // 2022/10/21 liang fix 使用的是 MPSC 队列
     private final Queue<HashedWheelTimeout> cancelledTimeouts = PlatformDependent.newMpscQueue();
     private final AtomicLong pendingTimeouts = new AtomicLong(0);
     private final long maxPendingTimeouts;
@@ -283,13 +301,21 @@ public class HashedWheelTimer implements Timer {
         checkNotNull(unit, "unit");
         checkPositive(tickDuration, "tickDuration");
         checkPositive(ticksPerWheel, "ticksPerWheel");
+        /**
+         * liang fix @date 2022/10/21
+         *  指定的线程 executor ,默认是 {@link Executors.DefaultThreadFactory}
+         */
         this.taskExecutor = checkNotNull(taskExecutor, "taskExecutor");
 
         // Normalize ticksPerWheel to power of two and initialize the wheel.
+        // 2022/10/21 liang fix 创建时间轮的环形数组
         wheel = createWheel(ticksPerWheel);
+
+        // 2022/10/21 liang fix 用于快速取模的掩码
         mask = wheel.length - 1;
 
         // Convert tickDuration to nanos.
+        // 2022/10/21 liang fix  转换成纳秒处理
         long duration = unit.toNanos(tickDuration);
 
         // Prevent overflow.
@@ -307,14 +333,19 @@ public class HashedWheelTimer implements Timer {
             this.tickDuration = duration;
         }
 
+        // 2022/10/21 liang fix 创建工作线程,构造器中调用,也就是说一个时间轮只有一个 thread
         workerThread = threadFactory.newThread(worker);
 
+        // 2022/10/21 liang fix 是否开启内存泄漏检测, 缺省状态下是 true;
         leak = leakDetection || !workerThread.isDaemon() ? leakDetector.track(this) : null;
 
+        // 2022/10/21 liang fix 最大允许等待任务数，HashedWheelTimer 中任务超出该阈值时会抛出异常
         this.maxPendingTimeouts = maxPendingTimeouts;
 
+        // 2022/10/21 liang fix 如果 HashedWheelTimer 的实例数超过 64，会打印错误日志
         if (INSTANCE_COUNTER.incrementAndGet() > INSTANCE_COUNT_LIMIT &&
             WARNED_TOO_MANY_INSTANCES.compareAndSet(false, true)) {
+            // 2022/10/21 liang fix 报告实例太多,实际上就是使用logger进行了error的日志输出
             reportTooManyInstances();
         }
     }
@@ -336,6 +367,7 @@ public class HashedWheelTimer implements Timer {
         //ticksPerWheel may not be greater than 2^30
         checkInRange(ticksPerWheel, 1, 1073741824, "ticksPerWheel");
 
+        // 2022/10/21 liang fix 进行向上取整为2的倍数
         ticksPerWheel = normalizeTicksPerWheel(ticksPerWheel);
         HashedWheelBucket[] wheel = new HashedWheelBucket[ticksPerWheel];
         for (int i = 0; i < wheel.length; i ++) {
@@ -377,6 +409,7 @@ public class HashedWheelTimer implements Timer {
         // Wait until the startTime is initialized by the worker.
         while (startTime == 0) {
             try {
+                // 2022/10/21 liang fix 进行
                 startTimeInitialized.await();
             } catch (InterruptedException ignore) {
                 // Ignore - it will be ready very soon.
@@ -435,6 +468,7 @@ public class HashedWheelTimer implements Timer {
         checkNotNull(task, "task");
         checkNotNull(unit, "unit");
 
+        // 2022/10/22 liang fix 增加等待任务计数
         long pendingTimeoutsCount = pendingTimeouts.incrementAndGet();
 
         if (maxPendingTimeouts > 0 && pendingTimeoutsCount > maxPendingTimeouts) {
@@ -444,17 +478,23 @@ public class HashedWheelTimer implements Timer {
                 + "timeouts (" + maxPendingTimeouts + ")");
         }
 
+        // 2022/10/21 liang fix 启动 workerThread
         start();
 
         // Add the timeout to the timeout queue which will be processed on the next tick.
         // During processing all the queued HashedWheelTimeouts will be added to the correct HashedWheelBucket.
+        // 2022/10/21 liang fix 计算结束时间, startTime 是在线程启动时进行赋值,因此这个任务队列不能保证整点执行?
         long deadline = System.nanoTime() + unit.toNanos(delay) - startTime;
 
-        // Guard against overflow.
+        // Guard against overflow. 正常执行不到这里
         if (delay > 0 && deadline < 0) {
             deadline = Long.MAX_VALUE;
         }
+
+        // 2022/10/21 liang fix 首次创建是,需要构造 timeout 事件lun, timeout对象时 timer 和task的桥梁,同时维护当前任务的执行状态
         HashedWheelTimeout timeout = new HashedWheelTimeout(this, task, deadline);
+        //liang fix 3. 添加任务到 Mpsc 队列中,这里使用这个的目的是为了减少多线程的竞争 whell,使用 这个MPSC 来减少竞争关系
+        //  , 在 workThread 线程中会将 队列中的数据添加到 HashedWheelBucket 中
         timeouts.add(timeout);
         return timeout;
     }
@@ -476,6 +516,7 @@ public class HashedWheelTimer implements Timer {
     }
 
     private final class Worker implements Runnable {
+        // 2022/10/22 liang fix 未处理任务列表
         private final Set<Timeout> unprocessedTimeouts = new HashSet<Timeout>();
 
         private long tick;
@@ -490,25 +531,35 @@ public class HashedWheelTimer implements Timer {
             }
 
             // Notify the other threads waiting for the initialization at start().
+            //liang fix 通知主线程可以启动了,主要是为了通知主线程当前线程的启动时间
+            //  ,方便主线程添加任务时计算任务执行的时间
             startTimeInitialized.countDown();
 
             do {
+                // 2022/10/21 liang fix 计算时针到下一次 tick 的时间间隔(sleep 时间),注意这里就是使用的Thread.sleep()方法
                 final long deadline = waitForNextTick();
                 if (deadline > 0) {
+                    // 2022/10/21 liang fix 计算时间轮所在的 index
                     int idx = (int) (tick & mask);
+                    // 2022/10/21 liang fix 清理 cancelledTimeouts 队列任务,如果任务已经添加到了 HashedWheelBucket 中,那么从HashedWheelBucket中清除
                     processCancelledTasks();
+                    // 2022/10/22 liang fix 获取当前的idx对应的 HashedWheelBucket
                     HashedWheelBucket bucket =
                             wheel[idx];
+                    // 2022/10/21 liang fix 将MPSC队列的任务添加到 HashedWheelBucket 上
                     transferTimeoutsToBuckets();
+                    // 2022/10/22 liang fix 执行到期的任务
                     bucket.expireTimeouts(deadline);
                     tick++;
                 }
             } while (WORKER_STATE_UPDATER.get(HashedWheelTimer.this) == WORKER_STATE_STARTED);
 
             // Fill the unprocessedTimeouts so we can return them from stop() method.
+            // 2022/10/22 liang fix 时间轮退出后，取出 slot 中未执行且未被取消的任务，并加入未处理任务列表，以便 stop() 方法返回
             for (HashedWheelBucket bucket: wheel) {
                 bucket.clearTimeouts(unprocessedTimeouts);
             }
+            // 2022/10/22 liang fix 将还没来得及添加到 slot 中的任务取出，如果任务未取消则加入未处理任务列表，以便 stop() 方法返回
             for (;;) {
                 HashedWheelTimeout timeout = timeouts.poll();
                 if (timeout == null) {
@@ -524,24 +575,29 @@ public class HashedWheelTimer implements Timer {
         private void transferTimeoutsToBuckets() {
             // transfer only max. 100000 timeouts per tick to prevent a thread to stale the workerThread when it just
             // adds new timeouts in a loop.
+            // 2022/10/21 liang fix 每次时针 tick 最多只处理 100000 个任务，以防阻塞 Worker 线程
             for (int i = 0; i < 100000; i++) {
                 HashedWheelTimeout timeout = timeouts.poll();
                 if (timeout == null) {
                     // all processed
                     break;
                 }
+                // 2022/10/22 liang fix 取消的任务不执行
                 if (timeout.state() == HashedWheelTimeout.ST_CANCELLED) {
                     // Was cancelled in the meantime.
                     continue;
                 }
-
+                // 2022/10/21 liang fix 计算任务需要经过多少个 tick
                 long calculated = timeout.deadline / tickDuration;
+                // 2022/10/21 liang fix 计算任务需要在时间轮中经历的圈数 remainingRounds
                 timeout.remainingRounds = (calculated - tick) / wheel.length;
 
+                // 2022/10/21 liang fix 如果任务在 timeouts 队列里已经过了执行时间, 那么会加入当前 HashedWheelBucket 中
                 final long ticks = Math.max(calculated, tick); // Ensure we don't schedule for past.
                 int stopIndex = (int) (ticks & mask);
 
                 HashedWheelBucket bucket = wheel[stopIndex];
+                // 2022/10/22 liang fix 添加到对应的 bucket 上
                 bucket.addTimeout(timeout);
             }
         }
@@ -569,6 +625,7 @@ public class HashedWheelTimer implements Timer {
          * @return Long.MIN_VALUE if received a shutdown request,
          * current time otherwise (with Long.MIN_VALUE changed by +1)
          */
+        // 2022/10/21 liang fix 计算需要等待的时间
         private long waitForNextTick() {
             long deadline = tickDuration * (tick + 1);
 
@@ -613,9 +670,13 @@ public class HashedWheelTimer implements Timer {
 
     private static final class HashedWheelTimeout implements Timeout, Runnable {
 
+        // 2022/10/21 liang fix 初始状态
         private static final int ST_INIT = 0;
+        // 2022/10/21 liang fix 取消状态
         private static final int ST_CANCELLED = 1;
+        // 2022/10/21 liang fix 过期状态
         private static final int ST_EXPIRED = 2;
+
         private static final AtomicIntegerFieldUpdater<HashedWheelTimeout> STATE_UPDATER =
                 AtomicIntegerFieldUpdater.newUpdater(HashedWheelTimeout.class, "state");
 
@@ -624,6 +685,7 @@ public class HashedWheelTimer implements Timer {
         private final long deadline;
 
         @SuppressWarnings({"unused", "FieldMayBeFinal", "RedundantFieldInitialization" })
+        // 2022/10/21 liang fix 状态,初始状态是 ST_INIT
         private volatile int state = ST_INIT;
 
         // remainingRounds will be calculated and set by Worker.transferTimeoutsToBuckets() before the
@@ -755,6 +817,7 @@ public class HashedWheelTimer implements Timer {
      * removal of HashedWheelTimeouts in the middle. Also the HashedWheelTimeout act as nodes themself and so no
      * extra object creation is needed.
      */
+    // 2022/10/21 liang fix 每个轮子上存的对象
     private static final class HashedWheelBucket {
         // Used for the linked-list datastructure
         private HashedWheelTimeout head;
@@ -787,6 +850,7 @@ public class HashedWheelTimer implements Timer {
                 if (timeout.remainingRounds <= 0) {
                     next = remove(timeout);
                     if (timeout.deadline <= deadline) {
+                        // 2022/10/22 liang fix 执行timeout任务
                         timeout.expire();
                     } else {
                         // The timeout was placed into a wrong slot. This should never happen.
@@ -848,6 +912,7 @@ public class HashedWheelTimer implements Timer {
             }
         }
 
+        // 2022/10/22 liang fix 获取一个 HashedWheelTimeout
         private HashedWheelTimeout pollTimeout() {
             HashedWheelTimeout head = this.head;
             if (head == null) {

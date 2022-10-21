@@ -38,9 +38,7 @@ public class StudyThread {
         /**
          * liang fix @date 2022/10/20
          *  {@link io.netty.util.concurrent.FastThreadLocal}
-         *
          *  {@link NioEventLoopGroup#NioEventLoopGroup()}
-         *
          *  {@link DefaultThreadFactory}
          *  {@link io.netty.util.concurrent.ThreadPerTaskExecutor}
          *  {@link io.netty.util.concurrent.FastThreadLocalRunnable}
