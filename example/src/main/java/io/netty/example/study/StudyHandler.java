@@ -78,7 +78,6 @@ public class StudyHandler {
 
         // 2022/9/23 liang fix 通道关闭
         channel.close();
-
         Thread.sleep(Integer.MAX_VALUE);
     }
 

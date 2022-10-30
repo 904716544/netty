@@ -40,6 +40,7 @@ import java.util.List;
  * @see CodedInputStream
  * @see CodedInputByteBufferNano
  */
+// 2022/10/30 liang fix 可变长度解码器
 public class ProtobufVarint32FrameDecoder extends ByteToMessageDecoder {
 
     // TODO maxFrameLength + safe skip + fail-fast option

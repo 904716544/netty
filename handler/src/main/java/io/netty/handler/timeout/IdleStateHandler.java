@@ -96,6 +96,11 @@ import java.util.concurrent.TimeUnit;
  * @see ReadTimeoutHandler
  * @see WriteTimeoutHandler
  */
+
+/**
+ * liang fix @date 2022/10/30
+ *      空闲状态处理器
+ */
 public class IdleStateHandler extends ChannelDuplexHandler {
     private static final long MIN_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
 
@@ -108,9 +113,28 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
     };
 
+    /**
+     * liang fix @date 2022/10/30
+     *  默认是false
+     *   a、如果observeOutput为false, 只有写入缓冲区成功 才算有写操作。
+     *   b、如果observeOutput为true，只要有写的意图 就算 有写操作，写意图包括：①写了，但缓冲区满了，没写成功 ②写了一个大数据，写确实在动，但没有完成。
+     */
     private final boolean observeOutput;
+
+    /**
+     * liang fix @date 2022/10/30
+     *  读空闲的时间
+     */
     private final long readerIdleTimeNanos;
+    /**
+     * liang fix @date 2022/10/30
+     *  写空闲的时间
+     */
     private final long writerIdleTimeNanos;
+    /**
+     * liang fix @date 2022/10/30
+     *  读或写空闲的时间
+     */
     private final long allIdleTimeNanos;
 
     private Future<?> readerIdleTimeout;
@@ -241,6 +265,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         if (ctx.channel().isActive() && ctx.channel().isRegistered()) {
             // channelActive() event has been fired already, which means this.channelActive() will
             // not be invoked. We have to initialize here instead.
+            // 2022/10/30 liang fix 进行初始化
             initialize(ctx);
         } else {
             // channelActive() event has not been fired yet.  this.channelActive() will be invoked
@@ -541,6 +566,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 }
             } else {
                 // Write occurred before the timeout - set a new timeout with shorter delay.
+                // 没有超时情况下, 设置下一次监听触发的定时任务
                 writerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
             }
         }

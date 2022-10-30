@@ -400,7 +400,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
             }
 
             // Ensure the pending writes are made of ByteBufs only.
-            // 2022/10/15 liang fix 获取最大写入字节大小,这里是动态变化的,默认情况下是 262144
+            // 2022/10/15 liang fix 获取最大写入字节大小,这里是动态变化的,默认情况下是 293976
             int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
             // 2022/10/15 liang fix 转换为 java中 ButeBuffer
             ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);

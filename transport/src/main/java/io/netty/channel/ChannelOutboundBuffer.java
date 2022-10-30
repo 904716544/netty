@@ -150,7 +150,7 @@ public final class ChannelOutboundBuffer {
             }
             do {
                 flushed ++;
-                // liang fix 如果当前是不可写状态,尝试修改为可写状态
+                // liang fix 如果当前是不可写状态,尝试修改为可写状态 放大果断,缩小谨慎(需要联系判断2次)
                 if (!entry.promise.setUncancellable()) {
                     // Was cancelled so make sure we free up memory and notify about the freed bytes
                     int pending = entry.cancel();
@@ -198,6 +198,7 @@ public final class ChannelOutboundBuffer {
         }
 
         long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, -size);
+        // 2022/10/29 liang fix 判断需要小于低水位线时
         if (notifyWritability && newWriteBufferSize < channel.config().getWriteBufferLowWaterMark()) {
             // 2022/10/14 liang fix 设置可写
             setWritable(invokeLater);

@@ -71,6 +71,7 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
     static {
         boolean hasParser = false;
         try {
+            // 2022/10/30 liang fix protobuf 在不同版本有不同处理,这里判断版本
             // MessageLite.getParserForType() is not available until protobuf 2.5.0.
             MessageLite.class.getDeclaredMethod("getParserForType");
             hasParser = true;
@@ -106,6 +107,8 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
         final byte[] array;
         final int offset;
         final int length = msg.readableBytes();
+
+        //判断msg内部是否包含了byte数组
         if (msg.hasArray()) {
             array = msg.array();
             offset = msg.arrayOffset() + msg.readerIndex();
@@ -114,6 +117,8 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
             offset = 0;
         }
 
+        //根据protocol的API版本选择反序列化代码执行
+        //将字节数组反序列化为protocol的实例
         if (extensionRegistry == null) {
             if (HAS_PARSER) {
                 out.add(prototype.getParserForType().parseFrom(array, offset, length));

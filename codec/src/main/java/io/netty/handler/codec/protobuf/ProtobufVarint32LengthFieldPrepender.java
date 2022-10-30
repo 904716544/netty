@@ -40,6 +40,7 @@ import io.netty.handler.codec.MessageToByteEncoder;
 @Sharable
 public class ProtobufVarint32LengthFieldPrepender extends MessageToByteEncoder<ByteBuf> {
 
+    // 2022/10/30 liang fix 数据长度的编码器,会添加一个header,描述当前msg的长度,这里没有使用int类型,而是优化了一下,使用可变长度的Varint32Length
     @Override
     protected void encode(
             ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {

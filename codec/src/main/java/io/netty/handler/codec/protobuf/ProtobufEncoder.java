@@ -63,6 +63,8 @@ public class ProtobufEncoder extends MessageToMessageEncoder<MessageLiteOrBuilde
     @Override
     protected void encode(ChannelHandlerContext ctx, MessageLiteOrBuilder msg, List<Object> out)
             throws Exception {
+        //liang fix 这是是更具Protobuf 的不同版本采用不同的分支进行数据的处理, 总之就是将数据调用
+        //  profobuf的toByteArray()方法转换为byte[]数组
         if (msg instanceof MessageLite) {
             out.add(wrappedBuffer(((MessageLite) msg).toByteArray()));
             return;
