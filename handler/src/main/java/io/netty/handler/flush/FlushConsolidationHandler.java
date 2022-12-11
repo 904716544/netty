@@ -56,18 +56,65 @@ import java.util.concurrent.Future;
  * The {@link FlushConsolidationHandler} should be put as first {@link ChannelHandler} in the
  * {@link ChannelPipeline} to have the best effect.
  */
+
+/**
+ *liang fix @date 2022/12/11 2:43 下午
+ * @author liliang
+ *  针对flush的优化,当使用这个后,当调用flush时不会真正的flush,而是缓存一批数据再flush,提供吞吐量
+ */
 public class FlushConsolidationHandler extends ChannelDuplexHandler {
+    /**
+     *liang fix @date 2022/12/11 2:47 下午
+     * @author liliang
+     *  真正进行flush的时机 -> 显示调度flush方法的次数
+     */
     private final int explicitFlushAfterFlushes;
+    /**
+     *liang fix @date 2022/12/11 2:49 下午
+     * @author liliang
+     *  用于判断是否启动异步线程来拉起flush任务
+     */
     private final boolean consolidateWhenNoReadInProgress;
+
+    /**
+     *liang fix @date 2022/12/11 2:57 下午
+     * @author liliang
+     *  异步线程
+     */
     private final Runnable flushTask;
+
+    /**
+     *liang fix @date 2022/12/11 2:58 下午
+     * @author liliang
+     *
+     */
     private int flushPendingCount;
+
+    /**
+     *liang fix @date 2022/12/11 2:58 下午
+     * @author liliang
+     *  标识当前存在read数据等待flush
+     */
     private boolean readInProgress;
+
+    /**
+     *liang fix @date 2022/12/11 3:00 下午
+     * @author liliang
+     *
+     */
     private ChannelHandlerContext ctx;
+
+    /**
+     *liang fix @date 2022/12/11 3:00 下午
+     * @author liliang
+     *
+     */
     private Future<?> nextScheduledFlush;
 
     /**
      * The default number of flushes after which a flush will be forwarded to downstream handlers (whether while in a
      * read loop, or while batching outside of a read loop).
+     * liang fix 默认的次数,也就是user 显示调度flush方法256次才会真正进行flush
      */
     public static final int DEFAULT_EXPLICIT_FLUSH_AFTER_FLUSHES = 256;
 
@@ -92,8 +139,7 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
      * Create new instance.
      *
      * @param explicitFlushAfterFlushes the number of flushes after which an explicit flush will be done.
-     * @param consolidateWhenNoReadInProgress whether to consolidate flushes even when no read loop is currently
-     *                                        ongoing.
+     * @param consolidateWhenNoReadInProgress whether to consolidate flushes even when no read loop is currently ongoing.
      */
     public FlushConsolidationHandler(int explicitFlushAfterFlushes, boolean consolidateWhenNoReadInProgress) {
         this.explicitFlushAfterFlushes =
@@ -120,6 +166,7 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
 
     @Override
     public void flush(ChannelHandlerContext ctx) throws Exception {
+        // 2022/12/11 liang fix 当前有read 数据 & 到达阈值,直接调用 flushNow
         if (readInProgress) {
             // If there is still a read in progress we are sure we will see a channelReadComplete(...) call. Thus
             // we only need to flush if we reach the explicitFlushAfterFlushes limit.
@@ -128,13 +175,16 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
             }
         } else if (consolidateWhenNoReadInProgress) {
             // Flush immediately if we reach the threshold, otherwise schedule
+            // 2022/12/11 liang fix 到达阈值直接进行flushNow
             if (++flushPendingCount == explicitFlushAfterFlushes) {
                 flushNow(ctx);
             } else {
+                // 2022/12/11 liang fix 启动futureTask进行 flushNow
                 scheduleFlush(ctx);
             }
         } else {
             // Always flush directly
+            // 2022/12/11 liang fix 马上进行flush
             flushNow(ctx);
         }
     }

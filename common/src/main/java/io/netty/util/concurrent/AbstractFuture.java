@@ -22,13 +22,16 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Abstract {@link Future} implementation which does not allow for cancellation.
- *
+ *  liang fix  java.util.concurrent.FutureTask中的实现方式十分相似。
  * @param <V>
  */
-// 2022/7/13 liang fix  java.util.concurrent.FutureTask中的实现方式十分相似。
 public abstract class AbstractFuture<V> implements Future<V> {
 
-    // 2022/7/13 liang fix 永久阻塞等待获取結果的方法
+    /**
+     *liang fix @date 2022/12/11 9:13 下午
+     * @author liliang
+     * liang fix 永久阻塞等待获取結果的方法
+     */
     @Override
     public V get() throws InterruptedException, ExecutionException {
         // 2022/7/13 liang fix  阻塞直到异步操作完成

@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  *      1. listener 相关,用于回调使用
  *      2. 判断方法, isSuccess() & isCancellable() & cause()
  *      3. sync() & await() 方法阻塞等待结果
- *
+ * @author liliang
  */
 @SuppressWarnings("ClassNameSameAsAncestorName")
 public interface Future<V> extends java.util.concurrent.Future<V> {
@@ -160,10 +160,17 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
     boolean awaitUninterruptibly(long timeoutMillis);
 
     /**
+     * 得到现在
      * Return the result without blocking. If the future is not done yet this will return {@code null}.
-     *
+     * <p>
      * As it is possible that a {@code null} value is used to mark the future as successful you also need to check
      * if the future is really done with {@link #isDone()} and not rely on the returned {@code null} value.
+     * liang fix 无阻塞返回结果, 如果 future 没有完成，那么将会返回空。
+     *  不要依赖null值去判断是否完成，因为结果可能就是返回null，因此你需要调用 isDone 方法去判断。因为 Runable 永远返回 null.
+     *  非阻塞马上返回Future的结果，如果Future未完成，此方法一定返回null；
+     *  有些场景下如果Future成功 ,获取到的结果是null则需要二次检查isDone()方法是否为true
+     *
+     * @return {@link V}
      */
     V getNow();
 

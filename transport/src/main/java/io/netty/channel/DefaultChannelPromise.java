@@ -114,6 +114,12 @@ public class DefaultChannelPromise extends DefaultPromise<Void> implements Chann
         return this;
     }
 
+    /**
+     *liang fix @date 2022/12/11 9:18 下午
+     * @author liliang
+     *  相比较于await()方法,多了一步 cause的判断,如果cause不是null,则抛出当前cause
+     *  如当使用 cancel 时,就sync就会抛出异常,而await不会
+     */
     @Override
     public ChannelPromise sync() throws InterruptedException {
         super.sync();

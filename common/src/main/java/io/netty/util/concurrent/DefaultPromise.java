@@ -50,8 +50,10 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     // 2022/7/13 liang fix // 用於填充result的值，當設置結果result傳入null，Promise執行成功，用這個值去錶示成功的結果
     private static final Object SUCCESS = new Object();
+
     // 2022/7/13 liang fix // 用於填充result的值，錶示Promise不能被取消
     private static final Object UNCANCELLABLE = new Object();
+
     // 2022/7/13 liang fix // CancellationException實例的持有器，用於判斷Promise取消狀態和拋出CancellationException
     private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
@@ -276,12 +278,18 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return this;
     }
 
+    /**
+     *liang fix @date 2022/12/11 9:33 下午
+     * @author liliang
+     *  同步永久阻塞等待 - 响应中断
+     */
     @Override
     public Promise<V> awaitUninterruptibly() {
         if (isDone()) {
             return this;
         }
 
+        // 2022/11/27 liang fix 判断当前promise的 Executor状态,必须是 close (如果用户有指定executor,默认是null)
         checkDeadLock();
 
         boolean interrupted = false;
@@ -416,9 +424,16 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return isDone0(result);
     }
 
+    /**
+     *liang fix @date 2022/12/11 9:17 下午
+     * @author liliang
+     *  剧本同await()方法,但是多了一步异常判断
+     */
     @Override
     public Promise<V> sync() throws InterruptedException {
+        // 2022/12/11 liang fix 同步永久阻塞等待
         await();
+        // 2022/12/11 liang fix 阻塞等待解除，如果執行存在异常，則直接拋出
         rethrowIfFailed();
         return this;
     }
@@ -659,6 +674,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         --waiters;
     }
 
+    /**
+     *liang fix @date 2022/12/11 9:18 下午
+     * @author liliang
+     *  cause不为null则抛出
+     */
     private void rethrowIfFailed() {
         Throwable cause = cause();
         if (cause == null) {

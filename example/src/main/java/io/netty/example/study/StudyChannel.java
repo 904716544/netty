@@ -2,7 +2,9 @@ package io.netty.example.study;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 /**
@@ -20,12 +22,19 @@ public class StudyChannel {
         serverBootstrap.group(bossGroup,workGroup)
                 .channel(NioServerSocketChannel.class)
                 .localAddress(9999)
+                .childHandler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) throws Exception {
+
+                    }
+                })
                 ;
 
 
         ChannelFuture sync = serverBootstrap.bind().sync();
         ChannelFuture channelFuture = sync.channel().closeFuture();
-
+        System.out.println(111);
+        channelFuture.get();
         bossGroup.shutdownGracefully();
         workGroup.shutdownGracefully();
 
