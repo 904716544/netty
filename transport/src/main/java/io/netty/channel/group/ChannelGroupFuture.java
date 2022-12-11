@@ -155,11 +155,6 @@ public interface ChannelGroupFuture extends Future<Void>, Iterable<ChannelFuture
     @Override
     ChannelGroupFuture await() throws InterruptedException;
 
-    /**
-     *liang fix @date 2022/12/11 9:33 下午
-     * @author liliang
-     *  同步永久阻塞等待 - 响应中断
-     */
     @Override
     ChannelGroupFuture awaitUninterruptibly();
 
